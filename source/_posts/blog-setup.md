@@ -62,10 +62,13 @@ script:
   - hexo clean
   - hexo g
 after_script:
+  - cd public
+  - git init
   - git config user.name "0GGmr0"
   - git config user.email "18817619557@qq.com"
-  - sed -i "s/gh_token/${GH_TOKEN}/g" ./_config.yml
-  - hexo d
+  - git add .
+  - git commit -m "Update docs"
+  - git push --force "https://${GH_TOKEN}@${GH_REF}" master:master
 branches:
   only:
     - source-code
