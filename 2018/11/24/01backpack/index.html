@@ -14,16 +14,16 @@
         <link rel="icon" href="/assets/images/favicon.ico">
     
     
-    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])\n01背包未优化情况​我理解能力比较弱，所以从一个实际例子来出发吧\n举例：​    5个物品，其(w,v)分别为  （2，3）、（4、5）、（3，7），那么从1物品到3物品逐层向上的填表结果如下图所示：\n\n\n\n\n🎒\n0\n1\n2\n3\n4\n5\n6\n\n\n\n\n3物品\n0\n0\n0\n7\n7\n10\n10\n\n\n2物品\n0\n0\n3\n3\n5\n5\n8\n\n\n1物品\n0\n0\n3\n3\n3\n3\n3\n\n\n\n\n​    原始的代码就显示非常蠢了：\n123456789for i := 0; i &lt; n; i++ &#123;    for j := 0; j &lt; w; j++ &#123;        if(j &lt; w[i]) &#123;           m[i][j] = m[i - 1][j]        &#125; else &#123;            m[i][j] = math.Max(m[i - 1][j], m[i - 1][j - w[i]] + v[i])        &#125;    &#125;&#125;\n​    上面这个奇丑无比的代码其实空间复杂度是n²，非常的爆炸，所以下面可以优化他的空间到n    \n01背包优化空间​    根据上面的推导式我们可以得出，每一次的m[i]层只和m[i - 1]层有联系，所以我们可以将二维数组直接化为一维数组，即滚动数组。    \n12345for i := 0; i &lt; n; i++ &#123;    for j := w; j &gt;= w[i]; j-- &#123;        m[j] = math.Max(m[j], m[j - w[i]] + v[i])    &#125;&#125;\n​    这里有一个注意点就是上面未优化的代码的j是从0开始递增遍历，而这里的代码是从w开始递减，这个是因为我们只有一个一维数组，每一次的遍历是要和上一次的结果进行比较的，如果我们从前往后遍历，那么最开始的那部分就会被覆盖，那么本次遍历到后面的时候发现前面的那部分都已经被覆盖掉了，代码就会崩掉了。\n","dateCreated":"2018-11-24T20:18:14+08:00","dateModified":"2019-04-02T23:05:41+08:00","datePublished":"2018-11-24T20:18:14+08:00","description":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])","headline":"01背包详解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/24/01背包/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/11/24/01背包/","keywords":"背包"}</script>
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])\n01背包未优化情况​我理解能力比较弱，所以从一个实际例子来出发吧\n举例：​    5个物品，其(w,v)分别为  （2，3）、（4、5）、（3，7），那么从1物品到3物品逐层向上的填表结果如下图所示：\n\n\n\n\n🎒\n0\n1\n2\n3\n4\n5\n6\n\n\n\n\n3物品\n0\n0\n0\n7\n7\n10\n10\n\n\n2物品\n0\n0\n3\n3\n5\n5\n8\n\n\n1物品\n0\n0\n3\n3\n3\n3\n3\n\n\n\n\n​    原始的代码就显示非常蠢了：\n123456789for i := 0; i &lt; n; i++ &#123;    for j := 0; j &lt; w; j++ &#123;        if(j &lt; w[i]) &#123;           m[i][j] = m[i - 1][j]        &#125; else &#123;            m[i][j] = math.Max(m[i - 1][j], m[i - 1][j - w[i]] + v[i])        &#125;    &#125;&#125;\n​    上面这个奇丑无比的代码其实空间复杂度是n²，非常的爆炸，所以下面可以优化他的空间到n    \n01背包优化空间​    根据上面的推导式我们可以得出，每一次的m[i]层只和m[i - 1]层有联系，所以我们可以将二维数组直接化为一维数组，即滚动数组。    \n12345for i := 0; i &lt; n; i++ &#123;    for j := w; j &gt;= w[i]; j-- &#123;        m[j] = math.Max(m[j], m[j - w[i]] + v[i])    &#125;&#125;\n​    这里有一个注意点就是上面未优化的代码的j是从0开始递增遍历，而这里的代码是从w开始递减，这个是因为我们只有一个一维数组，每一次的遍历是要和上一次的结果进行比较的，如果我们从前往后遍历，那么最开始的那部分就会被覆盖，那么本次遍历到后面的时候发现前面的那部分都已经被覆盖掉了，代码就会崩掉了。\n","dateCreated":"2018-11-24T20:18:14+08:00","dateModified":"2019-04-03T12:56:45+08:00","datePublished":"2018-11-24T20:18:14+08:00","description":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])","headline":"01背包详解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/24/01backpack/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/11/24/01backpack/","keywords":"背包"}</script>
     <meta name="description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为  m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])">
 <meta name="keywords" content="背包">
 <meta property="og:type" content="blog">
 <meta property="og:title" content="01背包详解">
-<meta property="og:url" content="http://yoursite.com/2018/11/24/01背包/index.html">
+<meta property="og:url" content="http://yoursite.com/2018/11/24/01backpack/index.html">
 <meta property="og:site_name" content="0GGmr0&#39;s Blog">
 <meta property="og:description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为  m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])">
 <meta property="og:locale" content="zh-cn">
-<meta property="og:updated_time" content="2019-04-02T15:05:41.396Z">
+<meta property="og:updated_time" content="2019-04-03T04:56:45.407Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="01背包详解">
 <meta name="twitter:description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为  m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])">
@@ -88,7 +88,7 @@
                 </a>
                 <h4 class="sidebar-profile-name">0ggmr0</h4>
                 
-                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+                    <h5 class="sidebar-profile-bio"><p>一只弱弱的javaer</p>
 </h5>
                 
             </div>
@@ -129,6 +129,15 @@
                     
                         <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
                         <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link open-algolia-search" href="#search" title="搜索">
+                    
+                        <i class="sidebar-button-icon fa fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">搜索</span>
                     </a>
             </li>
             
@@ -276,7 +285,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/处理器和处理器函数理解-1/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/processor-and-processorFunctions/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -302,7 +311,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01背包/&amp;title=01背包详解" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01backpack/&amp;title=01背包详解" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -345,7 +354,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/处理器和处理器函数理解-1/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/processor-and-processorFunctions/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -371,7 +380,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01背包/&amp;title=01背包详解" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01backpack/&amp;title=01背包详解" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -399,7 +408,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
                 
                 
                 <li class="share-option">
-                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01背包/&amp;title=01背包详解">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01backpack/&amp;title=01背包详解">
                         <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
                     </a>
                 </li>
@@ -427,14 +436,14 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
         
             <h4 id="about-card-name">0ggmr0</h4>
         
-            <div id="about-card-bio"><p>author.bio</p>
+            <div id="about-card-bio"><p>得之坦然，失之淡然，争取必然，顺其自然</p>
 </div>
         
         
             <div id="about-card-job">
                 <i class="fa fa-briefcase"></i>
                 <br>
-                <p>author.job</p>
+                <p>后端工程师</p>
 
             </div>
         
@@ -449,6 +458,96 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
 </div>
 
         
+            <div id="algolia-search-modal" class="modal-container">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="close-button"><i class="fa fa-times"></i></span>
+            <a href="https://algolia.com" target="_blank" rel="noopener" class="searchby-algolia text-color-light link-unstyled">
+                <span class="searchby-algolia-text text-color-light text-small">by</span>
+                <img class="searchby-algolia-logo" src="https://www.algolia.com/static_assets/images/press/downloads/algolia-light.svg">
+            </a>
+            <i class="search-icon fa fa-search"></i>
+            <form id="algolia-search-form">
+                <input type="text" id="algolia-search-input" name="search" class="form-control input--large search-input" placeholder="Search ">
+            </form>
+        </div>
+        <div class="modal-body">
+            <div class="no-result text-color-light text-center">没有找到文章</div>
+            <div class="results">
+                
+                <div class="media">
+                    
+                    <div class="media-body">
+                        <a class="link-unstyled" href="http://yoursite.com/2018/11/24/01backpack/">
+                            <h3 class="media-heading">01背包详解</h3>
+                        </a>
+                        <span class="media-meta">
+                            <span class="media-date text-small">
+                                
+                                    2018年11月24日
+                                
+                            </span>
+                        </span>
+                        <div class="media-content hide-xs font-merryweather"><p>01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为</p>
+<script type="math/tex; mode=display">
+m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script></div>
+                    </div>
+                    <div style="clear:both;"></div>
+                    <hr>
+                </div>
+                
+                <div class="media">
+                    
+                    <div class="media-body">
+                        <a class="link-unstyled" href="http://yoursite.com/2018/12/01/processor-and-processorFunctions/">
+                            <h3 class="media-heading">处理器和处理器函数理解</h3>
+                        </a>
+                        <span class="media-meta">
+                            <span class="media-date text-small">
+                                
+                                    2018年12月1日
+                                
+                            </span>
+                        </span>
+                        <div class="media-content hide-xs font-merryweather"><blockquote>
+<p>解释处理器和处理器函数的关系</p>
+<p>剖析<code>Handle</code>、<code>HandleFunc</code>、<code>Hander</code>、<code>HanderFunc</code>的联系</p>
+</blockquote></div>
+                    </div>
+                    <div style="clear:both;"></div>
+                    <hr>
+                </div>
+                
+                <div class="media">
+                    
+                    <div class="media-body">
+                        <a class="link-unstyled" href="http://yoursite.com/2019/04/03/blog-setup/">
+                            <h3 class="media-heading">hexo + tranquilpeak博客采坑记录</h3>
+                        </a>
+                        <span class="media-meta">
+                            <span class="media-date text-small">
+                                
+                                    2019年4月3日
+                                
+                            </span>
+                        </span>
+                        <div class="media-content hide-xs font-merryweather"><p>兜兜转转还是决定把博客搭起来，之前那个博客被git吞掉了=。=，只能重新再搭一个，主题选择了看起来很朴素的<a href="https://github.com/LouisBarranqueiro/hexo-theme-tranquilpeak" target="_blank" rel="noopener">tranquilpeak</a>，中间不可避免的踩了不少坑，这里做一个记录。<br></p></div>
+                    </div>
+                    <div style="clear:both;"></div>
+                    <hr>
+                </div>
+                
+            </div>
+        </div>
+        <div class="modal-footer">
+            <p class="results-count text-medium" data-message-zero="没有找到文章" data-message-one="找到 1 篇文章" data-message-other="找到 {n} 篇文章">
+                找到 3 篇文章
+            </p>
+        </div>
+    </div>
+</div>
+
+        
         
 <div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
         <!--SCRIPTS-->
@@ -458,21 +557,13 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
     
 
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.14.1/moment-with-locales.min.js"></script>
+    <script src="//cdn.jsdelivr.net/algoliasearch/3/algoliasearch.min.js"></script>
+    <script>
+        var algoliaClient = algoliasearch('TZ473X58WQ', 'b34f9bb20db973ea995f3a331760ced4');
+        var algoliaIndex = algoliaClient.initIndex('tranquilpeak');
+    </script>
 
-    <script type="text/x-mathjax-config">
-    MathJax.Hub.Config({
-        tex2jax: {
-            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
-            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
-            processEscapes: true
-        }
-    });
-    MathJax.Hub.Queue(function() {
-        var all = MathJax.Hub.getAllJax();
-        for (var i = 0; i < all.length; ++i)
-            all[i].SourceElement().parentNode.className += ' has-jax';
-    });
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
-</body>
+
+    </body>
 </html>

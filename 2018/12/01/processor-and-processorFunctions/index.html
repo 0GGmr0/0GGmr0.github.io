@@ -14,16 +14,16 @@
         <link rel="icon" href="/assets/images/favicon.ico">
     
     
-    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"\n解释处理器和处理器函数的关系\n剖析Handle、HandleFunc、Hander、HanderFunc的联系\n\n\n1 处理器是什么？Web应用的工作流程如下：\n\n客户端将请求发送到服务器的一个URL上\n服务器的多路复用器将接收到的请求重定向到正确的处理器，然后由该处理器对请求进行处理\n处理器处理请求并执行必要的动作。\n处理器调用模板引擎，生成相应的HTML并且将其返回给客户端\n\n所以简单来说处理器就是处理请求和执行动作\n2 处理器的工作原理2.1 处理请求先来看一段代码\n123456789101112131415161718192021package mainimport (\t\"fmt\"\t\"net/http\")type MyHandler struct&#123;&#125;func (h *MyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello World!\")&#125;func main() &#123;\thandler := MyHandler&#123;&#125;\tserver := http.Server&#123;\t\tAddr:    \"127.0.0.1:8080\",\t\tHandler: &amp;handler,\t&#125;\tserver.ListenAndServe()&#125;\n可以看到此代码是自己编写了一个处理器MyHandler，然后将其直接与服务器进行了绑定，以此代替原本在使用的默认多路复用器。这就意味着服务器不会再通过URL匹配来将请求路由至不同的处理器，而是直接使用同一个处理器处理所有的请求，因此无论浏览器访问什么地址，服务器返回的都是Hello World!。\n从上面代码我们可以知道要实现一个处理器我们需要实现一个Handler接口，其源码如下：\n123type Handler interface &#123;   ServeHTTP(ResponseWriter, *Request)&#125;\n2.2 使用多个处理器实际情况下我们不可能使用一个处理器去处理所有请求，所以我们最常用的就是不在Server里面去指定处理器，而是让服务器使用默认多路复用器，然后使用http.Handle函数来将处理器和多路复用器绑定。\n下面代码就是一个两个处理器的样例程序\n123456789101112131415161718192021222324252627282930package mainimport (   \"fmt\"   \"net/http\")type HelloHandler struct &#123;&#125;func (h *HelloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;   fmt.Fprintf(w, \"Hello!\")&#125;type WorldHandler struct &#123;&#125;func (h *WorldHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;   fmt.Fprintf(w, \"Hello!\")&#125;func main() &#123;   server := http.Server&#123;      Addr: \"127.0.0.1:8080\",   &#125;   hello := HelloHandler&#123;&#125;   world := WorldHandler&#123;&#125;   http.Handle(\"/hello\", &amp;hello)   http.Handle(\"/world\", &amp;world)   server.ListenAndServe()&#125;\n2.3  处理器函数从2.2和2.3的代码我们可以看到如果直接写处理器，那么我们需要额外定义一个结构体，这样写起来非常麻烦，所以我们有一种比较清爽的书写方式，其代码如下：\n123456789101112131415161718192021222324package mainimport (\t\"fmt\"\t\"net/http\")func hello(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\")&#125;func world(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"World!\")&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thttp.HandleFunc(\"/hello\", hello)\thttp.HandleFunc(\"/world\", world)\tserver.ListenAndServe()&#125;\n可以看到上面代码的hello和world函数和之前代码的ServeHTTP方法有着相同的签名，然后在main函数中通过http.HandleFunc函数将hello和world转换成Handler并和多路复用器绑定。\n要分析其实现原理，我们要先看http.Handle和http.HandleFunc的源码：\n首先来看http.Handle的源码：\n123func Handle(pattern string, handler Handler) &#123;     DefaultServeMux.Handle(pattern, handler) &#125;\n可以看到他第二个参数就是处理器Handler，我们发现他其实调用的是默认多路复用器DefaultServeMux的Handle方法，后者的Handle只是多了一些处理细节这里不再赘述。\n那么接下来看http.HandleFunc的源码：\n123func HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;\tDefaultServeMux.HandleFunc(pattern, handler)&#125;\n可以看到上述代码其实第二个参数是一个Handler处理器，但是其实实参是一个相同签名的其他函数，那么这个转换是通过什么进行的呢？\n我们发现这里也是调用的是默认多路复用器DefaultServeMux的HandleFunc方法，其源码如下：\n123456func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;\tif handler == nil &#123;\t\tpanic(\"http: nil handler\")\t&#125;\tmux.Handle(pattern, HandlerFunc(handler))&#125;\n通过观察源码答案就很清晰了，是HandlerFunc进行了转换工作。\n我们来看一下HandlerFunc的源码：\n123456type HandlerFunc func(ResponseWriter, *Request)// ServeHTTP calls f(w, r).func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request) &#123;\tf(w, r)&#125;\n看完上述代码我们可以明白其实将hello函数转换成处理器的实际代码如下：\n1HelloHandler := HandlerFunc(hello)\n看到这里想必各位已经明白，对于和ServeHTTP有相同签名的函数是如何转换成处理器Handler的了。\n\nPS：虽然处理器函数的代码更加整洁，但是处理器函数不能完全替代处理器。这是因为在某些情况下，代码可能已经包含了某个接口或者某种类型，这时我们只需要为它们添加ServeHTTP方法就可以将它们转变成处理器。\n\n2.4 串联多个处理器和处理器函数有了上面的知识铺垫，现在我们来深入探讨一下串联多个处理器（处理器函数）的做法。\n因为在GO语言中程序可以将一个函数传递给另一个函数，所以我们可以实现这个功能。\n2.4.1 串联多个处理器函数直接用例子上手，假设现在要将hello、world串联起来，其代码如下：\n123456789101112131415161718192021222324252627package mainimport (\t\"fmt\"\t\"net/http\"\t\"reflect\"\t\"runtime\")func hello(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\\n\")&#125;func world(h http.HandlerFunc) http.HandlerFunc &#123;\treturn func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"world!\\n\")\t\th(w, r)\t&#125;&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thttp.HandleFunc(\"/hello\", world(hello))\tserver.ListenAndServe()&#125;\n如果要再增加一个funny函数，其函数原型如下：\n123456func funny(h http.HandlerFunc) http.HandlerFunc &#123;\treturn func(w http.ResponseWriter, r *http.Request) &#123;\t\t...\t\th(w, r)\t&#125;&#125;\n那么只需将http.HandleFunc修改为如下：\n1http.HandleFunc(\"/hello\", funny(world(hello)))\n2.4.2 串联多个处理器同样是串联hello、world、funny，代码如下：\n1234567891011121314151617181920212223242526272829303132333435package mainimport (\t\"fmt\"\t\"net/http\")type HelloHandler struct&#123;&#125;func (h HelloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\\n\")&#125;func world(h http.Handler) http.Handler &#123;\treturn http.HandlerFunc (func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"world!\\n\")\t\th.ServeHTTP(w, r)\t&#125;)&#125;func funny(h http.Handler) http.Handler &#123;\treturn http.HandlerFunc (func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"funny!\\n\")\t\th.ServeHTTP(w, r)\t&#125;)&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thello := HelloHandler&#123;&#125;\thttp.Handle(\"/hello\", funny(world(hello)))\tserver.ListenAndServe()&#125;\n参考资料：Go Web Programming\n","dateCreated":"2018-12-01T18:59:14+08:00","dateModified":"2019-04-03T10:02:07+08:00","datePublished":"2018-12-01T18:59:14+08:00","description":"\n解释处理器和处理器函数的关系\n剖析Handle、HandleFunc、Hander、HanderFunc的联系\n","headline":"处理器和处理器函数理解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/","keywords":"go-web"}</script>
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"\n解释处理器和处理器函数的关系\n剖析Handle、HandleFunc、Hander、HanderFunc的联系\n\n\n1 处理器是什么？Web应用的工作流程如下：\n\n客户端将请求发送到服务器的一个URL上\n服务器的多路复用器将接收到的请求重定向到正确的处理器，然后由该处理器对请求进行处理\n处理器处理请求并执行必要的动作。\n处理器调用模板引擎，生成相应的HTML并且将其返回给客户端\n\n所以简单来说处理器就是处理请求和执行动作\n2 处理器的工作原理2.1 处理请求先来看一段代码\n123456789101112131415161718192021package mainimport (\t\"fmt\"\t\"net/http\")type MyHandler struct&#123;&#125;func (h *MyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello World!\")&#125;func main() &#123;\thandler := MyHandler&#123;&#125;\tserver := http.Server&#123;\t\tAddr:    \"127.0.0.1:8080\",\t\tHandler: &amp;handler,\t&#125;\tserver.ListenAndServe()&#125;\n可以看到此代码是自己编写了一个处理器MyHandler，然后将其直接与服务器进行了绑定，以此代替原本在使用的默认多路复用器。这就意味着服务器不会再通过URL匹配来将请求路由至不同的处理器，而是直接使用同一个处理器处理所有的请求，因此无论浏览器访问什么地址，服务器返回的都是Hello World!。\n从上面代码我们可以知道要实现一个处理器我们需要实现一个Handler接口，其源码如下：\n123type Handler interface &#123;   ServeHTTP(ResponseWriter, *Request)&#125;\n2.2 使用多个处理器实际情况下我们不可能使用一个处理器去处理所有请求，所以我们最常用的就是不在Server里面去指定处理器，而是让服务器使用默认多路复用器，然后使用http.Handle函数来将处理器和多路复用器绑定。\n下面代码就是一个两个处理器的样例程序\n123456789101112131415161718192021222324252627282930package mainimport (   \"fmt\"   \"net/http\")type HelloHandler struct &#123;&#125;func (h *HelloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;   fmt.Fprintf(w, \"Hello!\")&#125;type WorldHandler struct &#123;&#125;func (h *WorldHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;   fmt.Fprintf(w, \"Hello!\")&#125;func main() &#123;   server := http.Server&#123;      Addr: \"127.0.0.1:8080\",   &#125;   hello := HelloHandler&#123;&#125;   world := WorldHandler&#123;&#125;   http.Handle(\"/hello\", &amp;hello)   http.Handle(\"/world\", &amp;world)   server.ListenAndServe()&#125;\n2.3  处理器函数从2.2和2.3的代码我们可以看到如果直接写处理器，那么我们需要额外定义一个结构体，这样写起来非常麻烦，所以我们有一种比较清爽的书写方式，其代码如下：\n123456789101112131415161718192021222324package mainimport (\t\"fmt\"\t\"net/http\")func hello(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\")&#125;func world(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"World!\")&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thttp.HandleFunc(\"/hello\", hello)\thttp.HandleFunc(\"/world\", world)\tserver.ListenAndServe()&#125;\n可以看到上面代码的hello和world函数和之前代码的ServeHTTP方法有着相同的签名，然后在main函数中通过http.HandleFunc函数将hello和world转换成Handler并和多路复用器绑定。\n要分析其实现原理，我们要先看http.Handle和http.HandleFunc的源码：\n首先来看http.Handle的源码：\n123func Handle(pattern string, handler Handler) &#123;     DefaultServeMux.Handle(pattern, handler) &#125;\n可以看到他第二个参数就是处理器Handler，我们发现他其实调用的是默认多路复用器DefaultServeMux的Handle方法，后者的Handle只是多了一些处理细节这里不再赘述。\n那么接下来看http.HandleFunc的源码：\n123func HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;\tDefaultServeMux.HandleFunc(pattern, handler)&#125;\n可以看到上述代码其实第二个参数是一个Handler处理器，但是其实实参是一个相同签名的其他函数，那么这个转换是通过什么进行的呢？\n我们发现这里也是调用的是默认多路复用器DefaultServeMux的HandleFunc方法，其源码如下：\n123456func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;\tif handler == nil &#123;\t\tpanic(\"http: nil handler\")\t&#125;\tmux.Handle(pattern, HandlerFunc(handler))&#125;\n通过观察源码答案就很清晰了，是HandlerFunc进行了转换工作。\n我们来看一下HandlerFunc的源码：\n123456type HandlerFunc func(ResponseWriter, *Request)// ServeHTTP calls f(w, r).func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request) &#123;\tf(w, r)&#125;\n看完上述代码我们可以明白其实将hello函数转换成处理器的实际代码如下：\n1HelloHandler := HandlerFunc(hello)\n看到这里想必各位已经明白，对于和ServeHTTP有相同签名的函数是如何转换成处理器Handler的了。\n\nPS：虽然处理器函数的代码更加整洁，但是处理器函数不能完全替代处理器。这是因为在某些情况下，代码可能已经包含了某个接口或者某种类型，这时我们只需要为它们添加ServeHTTP方法就可以将它们转变成处理器。\n\n2.4 串联多个处理器和处理器函数有了上面的知识铺垫，现在我们来深入探讨一下串联多个处理器（处理器函数）的做法。\n因为在GO语言中程序可以将一个函数传递给另一个函数，所以我们可以实现这个功能。\n2.4.1 串联多个处理器函数直接用例子上手，假设现在要将hello、world串联起来，其代码如下：\n123456789101112131415161718192021222324252627package mainimport (\t\"fmt\"\t\"net/http\"\t\"reflect\"\t\"runtime\")func hello(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\\n\")&#125;func world(h http.HandlerFunc) http.HandlerFunc &#123;\treturn func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"world!\\n\")\t\th(w, r)\t&#125;&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thttp.HandleFunc(\"/hello\", world(hello))\tserver.ListenAndServe()&#125;\n如果要再增加一个funny函数，其函数原型如下：\n123456func funny(h http.HandlerFunc) http.HandlerFunc &#123;\treturn func(w http.ResponseWriter, r *http.Request) &#123;\t\t...\t\th(w, r)\t&#125;&#125;\n那么只需将http.HandleFunc修改为如下：\n1http.HandleFunc(\"/hello\", funny(world(hello)))\n2.4.2 串联多个处理器同样是串联hello、world、funny，代码如下：\n1234567891011121314151617181920212223242526272829303132333435package mainimport (\t\"fmt\"\t\"net/http\")type HelloHandler struct&#123;&#125;func (h HelloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\\n\")&#125;func world(h http.Handler) http.Handler &#123;\treturn http.HandlerFunc (func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"world!\\n\")\t\th.ServeHTTP(w, r)\t&#125;)&#125;func funny(h http.Handler) http.Handler &#123;\treturn http.HandlerFunc (func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"funny!\\n\")\t\th.ServeHTTP(w, r)\t&#125;)&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thello := HelloHandler&#123;&#125;\thttp.Handle(\"/hello\", funny(world(hello)))\tserver.ListenAndServe()&#125;\n参考资料：Go Web Programming\n","dateCreated":"2018-12-01T18:59:14+08:00","dateModified":"2019-04-03T15:05:42+08:00","datePublished":"2018-12-01T18:59:14+08:00","description":"\n解释处理器和处理器函数的关系\n剖析Handle、HandleFunc、Hander、HanderFunc的联系\n","headline":"处理器和处理器函数理解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/12/01/processor-and-processorFunctions/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/12/01/processor-and-processorFunctions/","keywords":"go web"}</script>
     <meta name="description" content="解释处理器和处理器函数的关系 剖析Handle、HandleFunc、Hander、HanderFunc的联系">
-<meta name="keywords" content="go-web">
+<meta name="keywords" content="go web">
 <meta property="og:type" content="blog">
 <meta property="og:title" content="处理器和处理器函数理解">
-<meta property="og:url" content="http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/index.html">
+<meta property="og:url" content="http://yoursite.com/2018/12/01/processor-and-processorFunctions/index.html">
 <meta property="og:site_name" content="0GGmr0&#39;s Blog">
 <meta property="og:description" content="解释处理器和处理器函数的关系 剖析Handle、HandleFunc、Hander、HanderFunc的联系">
 <meta property="og:locale" content="zh-cn">
-<meta property="og:updated_time" content="2019-04-03T02:02:07.349Z">
+<meta property="og:updated_time" content="2019-04-03T07:05:42.859Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="处理器和处理器函数理解">
 <meta name="twitter:description" content="解释处理器和处理器函数的关系 剖析Handle、HandleFunc、Hander、HanderFunc的联系">
@@ -88,7 +88,7 @@
                 </a>
                 <h4 class="sidebar-profile-name">0ggmr0</h4>
                 
-                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+                    <h5 class="sidebar-profile-bio"><p>一只弱弱的javaer</p>
 </h5>
                 
             </div>
@@ -129,6 +129,15 @@
                     
                         <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
                         <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link open-algolia-search" href="#search" title="搜索">
+                    
+                        <i class="sidebar-button-icon fa fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">搜索</span>
                     </a>
             </li>
             
@@ -259,7 +268,7 @@
             <div class="post-footer-tags">
                 <span class="text-color-light text-small">标签</span><br>
                 
-    <a class="tag tag--primary tag--small t-link" href="/tags/go-web/">go-web</a>
+    <a class="tag tag--primary tag--small t-link" href="/tags/go-web/">go web</a>
 
             </div>
         
@@ -269,7 +278,8 @@
         <ul class="post-actions post-action-nav">
             <li class="post-action">
                 
-                    <a class="post-action-btn btn btn--disabled">
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/03/blog-setup/" data-tooltip="hexo + tranquilpeak博客采坑记录" aria-label="上一篇: hexo + tranquilpeak博客采坑记录">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -278,7 +288,7 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01背包/" data-tooltip="01背包详解" aria-label="下一篇: 01背包详解">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01backpack/" data-tooltip="01背包详解" aria-label="下一篇: 01背包详解">
                 
                     <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
@@ -296,7 +306,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/&amp;title=处理器和处理器函数理解" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/processor-and-processorFunctions/&amp;title=处理器和处理器函数理解" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -338,7 +348,8 @@
         <ul class="post-actions post-action-nav">
             <li class="post-action">
                 
-                    <a class="post-action-btn btn btn--disabled">
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/03/blog-setup/" data-tooltip="hexo + tranquilpeak博客采坑记录" aria-label="上一篇: hexo + tranquilpeak博客采坑记录">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -347,7 +358,7 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01背包/" data-tooltip="01背包详解" aria-label="下一篇: 01背包详解">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01backpack/" data-tooltip="01背包详解" aria-label="下一篇: 01背包详解">
                 
                     <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
@@ -365,7 +376,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/&amp;title=处理器和处理器函数理解" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/processor-and-processorFunctions/&amp;title=处理器和处理器函数理解" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -393,7 +404,7 @@
                 
                 
                 <li class="share-option">
-                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/&amp;title=处理器和处理器函数理解">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/processor-and-processorFunctions/&amp;title=处理器和处理器函数理解">
                         <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
                     </a>
                 </li>
@@ -421,14 +432,14 @@
         
             <h4 id="about-card-name">0ggmr0</h4>
         
-            <div id="about-card-bio"><p>author.bio</p>
+            <div id="about-card-bio"><p>得之坦然，失之淡然，争取必然，顺其自然</p>
 </div>
         
         
             <div id="about-card-job">
                 <i class="fa fa-briefcase"></i>
                 <br>
-                <p>author.job</p>
+                <p>后端工程师</p>
 
             </div>
         
@@ -443,6 +454,96 @@
 </div>
 
         
+            <div id="algolia-search-modal" class="modal-container">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="close-button"><i class="fa fa-times"></i></span>
+            <a href="https://algolia.com" target="_blank" rel="noopener" class="searchby-algolia text-color-light link-unstyled">
+                <span class="searchby-algolia-text text-color-light text-small">by</span>
+                <img class="searchby-algolia-logo" src="https://www.algolia.com/static_assets/images/press/downloads/algolia-light.svg">
+            </a>
+            <i class="search-icon fa fa-search"></i>
+            <form id="algolia-search-form">
+                <input type="text" id="algolia-search-input" name="search" class="form-control input--large search-input" placeholder="Search ">
+            </form>
+        </div>
+        <div class="modal-body">
+            <div class="no-result text-color-light text-center">没有找到文章</div>
+            <div class="results">
+                
+                <div class="media">
+                    
+                    <div class="media-body">
+                        <a class="link-unstyled" href="http://yoursite.com/2018/11/24/01backpack/">
+                            <h3 class="media-heading">01背包详解</h3>
+                        </a>
+                        <span class="media-meta">
+                            <span class="media-date text-small">
+                                
+                                    2018年11月24日
+                                
+                            </span>
+                        </span>
+                        <div class="media-content hide-xs font-merryweather"><p>01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为</p>
+<script type="math/tex; mode=display">
+m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script></div>
+                    </div>
+                    <div style="clear:both;"></div>
+                    <hr>
+                </div>
+                
+                <div class="media">
+                    
+                    <div class="media-body">
+                        <a class="link-unstyled" href="http://yoursite.com/2018/12/01/processor-and-processorFunctions/">
+                            <h3 class="media-heading">处理器和处理器函数理解</h3>
+                        </a>
+                        <span class="media-meta">
+                            <span class="media-date text-small">
+                                
+                                    2018年12月1日
+                                
+                            </span>
+                        </span>
+                        <div class="media-content hide-xs font-merryweather"><blockquote>
+<p>解释处理器和处理器函数的关系</p>
+<p>剖析<code>Handle</code>、<code>HandleFunc</code>、<code>Hander</code>、<code>HanderFunc</code>的联系</p>
+</blockquote></div>
+                    </div>
+                    <div style="clear:both;"></div>
+                    <hr>
+                </div>
+                
+                <div class="media">
+                    
+                    <div class="media-body">
+                        <a class="link-unstyled" href="http://yoursite.com/2019/04/03/blog-setup/">
+                            <h3 class="media-heading">hexo + tranquilpeak博客采坑记录</h3>
+                        </a>
+                        <span class="media-meta">
+                            <span class="media-date text-small">
+                                
+                                    2019年4月3日
+                                
+                            </span>
+                        </span>
+                        <div class="media-content hide-xs font-merryweather"><p>兜兜转转还是决定把博客搭起来，之前那个博客被git吞掉了=。=，只能重新再搭一个，主题选择了看起来很朴素的<a href="https://github.com/LouisBarranqueiro/hexo-theme-tranquilpeak" target="_blank" rel="noopener">tranquilpeak</a>，中间不可避免的踩了不少坑，这里做一个记录。<br></p></div>
+                    </div>
+                    <div style="clear:both;"></div>
+                    <hr>
+                </div>
+                
+            </div>
+        </div>
+        <div class="modal-footer">
+            <p class="results-count text-medium" data-message-zero="没有找到文章" data-message-one="找到 1 篇文章" data-message-other="找到 {n} 篇文章">
+                找到 3 篇文章
+            </p>
+        </div>
+    </div>
+</div>
+
+        
         
 <div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
         <!--SCRIPTS-->
@@ -452,21 +553,13 @@
     
 
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.14.1/moment-with-locales.min.js"></script>
+    <script src="//cdn.jsdelivr.net/algoliasearch/3/algoliasearch.min.js"></script>
+    <script>
+        var algoliaClient = algoliasearch('TZ473X58WQ', 'b34f9bb20db973ea995f3a331760ced4');
+        var algoliaIndex = algoliaClient.initIndex('tranquilpeak');
+    </script>
 
-    <script type="text/x-mathjax-config">
-    MathJax.Hub.Config({
-        tex2jax: {
-            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
-            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
-            processEscapes: true
-        }
-    });
-    MathJax.Hub.Queue(function() {
-        var all = MathJax.Hub.getAllJax();
-        for (var i = 0; i < all.length; ++i)
-            all[i].SourceElement().parentNode.className += ' has-jax';
-    });
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
-</body>
+
+    </body>
 </html>
