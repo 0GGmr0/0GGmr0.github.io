@@ -84,5 +84,5 @@ theme: tranquilpeak
 ## Docs: https://hexo.io/docs/deployment.html
 deploy:
   type: git
-  repo: git@github.com:0GGmr0/0GGmr0.github.io.git
+  repo: https://gh_token@github.com/0GGmr0/0GGmr0.github.io.git
   branch: master

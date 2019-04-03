@@ -1,0 +1,42 @@
+os:
+  - osx
+
+language: node_js
+node_js: stable
+
+cache:
+  directories:
+    - node_modules
+
+before_install:
+  - npm i imagemin-mozjpeg@6.0.0
+
+install:
+  - npm install
+
+before_script:
+  - git submodule update --remote --merge
+
+script:
+  - hexo clean
+  - hexo g
+after_script:
+  - git config user.name "0GGmr0"
+  - git config user.email "18817619557@qq.com"
+  - sed -i "s/gh_token/${GH_TOKEN}/g" ./_config.yml
+  - hexo d
+branches:
+  only:
+    - source-code
+env:
+ global:
+   - GH_REF: github.com/0GGmr0/0GGmr0.github.io
+
+# configure notifications (email, IRC, campfire etc)
+# please update this section to your needs!
+# https://docs.travis-ci.com/user/notifications/
+# notifications:
+#   email:
+#     - 15388511@qq.com
+#   on_success: change
+#   on_failure: always
