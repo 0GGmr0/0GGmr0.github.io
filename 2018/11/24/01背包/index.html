@@ -10,7 +10,8 @@
     <meta name="author" content="0ggmr0">
     
     
-        <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico">
+        <!-- <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico"> -->
+        <link rel="icon" href="/assets/images/favicon.ico">
     
     
     <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])\n01背包未优化情况​我理解能力比较弱，所以从一个实际例子来出发吧\n举例：​    5个物品，其(w,v)分别为  （2，3）、（4、5）、（3，7），那么从1物品到3物品逐层向上的填表结果如下图所示：\n\n\n\n\n🎒\n0\n1\n2\n3\n4\n5\n6\n\n\n\n\n3物品\n0\n0\n0\n7\n7\n10\n10\n\n\n2物品\n0\n0\n3\n3\n5\n5\n8\n\n\n1物品\n0\n0\n3\n3\n3\n3\n3\n\n\n\n\n​    原始的代码就显示非常蠢了：\n123456789for i := 0; i &lt; n; i++ &#123;    for j := 0; j &lt; w; j++ &#123;        if(j &lt; w[i]) &#123;           m[i][j] = m[i - 1][j]        &#125; else &#123;            m[i][j] = math.Max(m[i - 1][j], m[i - 1][j - w[i]] + v[i])        &#125;    &#125;&#125;\n​    上面这个奇丑无比的代码其实空间复杂度是n²，非常的爆炸，所以下面可以优化他的空间到n    \n01背包优化空间​    根据上面的推导式我们可以得出，每一次的m[i]层只和m[i - 1]层有联系，所以我们可以将二维数组直接化为一维数组，即滚动数组。    \n12345for i := 0; i &lt; n; i++ &#123;    for j := w; j &gt;= w[i]; j-- &#123;        m[j] = math.Max(m[j], m[j - w[i]] + v[i])    &#125;&#125;\n​    这里有一个注意点就是上面未优化的代码的j是从0开始递增遍历，而这里的代码是从w开始递减，这个是因为我们只有一个一维数组，每一次的遍历是要和上一次的结果进行比较的，如果我们从前往后遍历，那么最开始的那部分就会被覆盖，那么本次遍历到后面的时候发现前面的那部分都已经被覆盖掉了，代码就会崩掉了。\n","dateCreated":"2018-11-24T20:18:14+08:00","dateModified":"2019-04-02T23:05:41+08:00","datePublished":"2018-11-24T20:18:14+08:00","description":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])","headline":"01背包详解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/24/01背包/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/11/24/01背包/","keywords":"背包"}</script>
@@ -37,7 +38,7 @@
     
     
     <!--STYLES-->
-    <link rel="stylesheet" href="/assets/css/style-c4ozcsklz4kht2pebhp44xorvyverh23toayhn7i6ubrpyedak24hv1v0hyd.min.css">
+    <link rel="stylesheet" href="/assets/css/style-ljeixrezirymj7v5k3txlegl4gaqrpshsagxbusagvgz9ih8tnarxvnzgill.min.css">
     <!--STYLES END-->
     
 
@@ -451,7 +452,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
         
 <div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
         <!--SCRIPTS-->
-<script src="/assets/js/script-dbd16rvloemmuxdzniplmnxxvwoz24eya9wol0b7vvmlokgqsjivmb8dnscy.min.js"></script>
+<script src="/assets/js/script-omrt6sh0skv3hg008jvdfajcsqqzyibzw4ehun1vxljlb2mfrl84jfkr42nm.min.js"></script>
 <!--SCRIPTS END-->
 
     
