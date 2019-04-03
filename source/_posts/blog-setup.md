@@ -1,6 +1,6 @@
 ---
 title: hexo + tranquilpeak博客采坑记录  
-date: 2018-11-24 20:18:14
+date: 2019-04-03 14:18:14
 tags: [Travis CI]
 categories: [博客]
 mathjax: false
