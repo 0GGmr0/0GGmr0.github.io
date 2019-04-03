@@ -58,10 +58,11 @@ default_category: uncategorized
 category_map: 
   算法: algorithm
   后端: backend
-  go: go
+  博客: blog
 tag_map: 
   背包: backpack
-  go-web: go-web
+  go web: go-web
+  Travis CI: Travis-CI
 
 # Date / Time format
 ## Hexo uses Moment.js to parse and display date
