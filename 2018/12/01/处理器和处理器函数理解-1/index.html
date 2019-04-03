@@ -1,0 +1,456 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="0GGmr0&#39;s Blog">
+    <title>处理器和处理器函数理解 - 0GGmr0&#39;s Blog</title>
+    <meta name="author" content="0ggmr0">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"\n解释处理器和处理器函数的关系\n剖析Handle、HandleFunc、Hander、HanderFunc的联系\n\n\n1 处理器是什么？Web应用的工作流程如下：\n\n客户端将请求发送到服务器的一个URL上\n服务器的多路复用器将接收到的请求重定向到正确的处理器，然后由该处理器对请求进行处理\n处理器处理请求并执行必要的动作。\n处理器调用模板引擎，生成相应的HTML并且将其返回给客户端\n\n所以简单来说处理器就是处理请求和执行动作\n2 处理器的工作原理2.1 处理请求先来看一段代码\n123456789101112131415161718192021package mainimport (\t\"fmt\"\t\"net/http\")type MyHandler struct&#123;&#125;func (h *MyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello World!\")&#125;func main() &#123;\thandler := MyHandler&#123;&#125;\tserver := http.Server&#123;\t\tAddr:    \"127.0.0.1:8080\",\t\tHandler: &amp;handler,\t&#125;\tserver.ListenAndServe()&#125;\n可以看到此代码是自己编写了一个处理器MyHandler，然后将其直接与服务器进行了绑定，以此代替原本在使用的默认多路复用器。这就意味着服务器不会再通过URL匹配来将请求路由至不同的处理器，而是直接使用同一个处理器处理所有的请求，因此无论浏览器访问什么地址，服务器返回的都是Hello World!。\n从上面代码我们可以知道要实现一个处理器我们需要实现一个Handler接口，其源码如下：\n123type Handler interface &#123;   ServeHTTP(ResponseWriter, *Request)&#125;\n2.2 使用多个处理器实际情况下我们不可能使用一个处理器去处理所有请求，所以我们最常用的就是不在Server里面去指定处理器，而是让服务器使用默认多路复用器，然后使用http.Handle函数来将处理器和多路复用器绑定。\n下面代码就是一个两个处理器的样例程序\n123456789101112131415161718192021222324252627282930package mainimport (   \"fmt\"   \"net/http\")type HelloHandler struct &#123;&#125;func (h *HelloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;   fmt.Fprintf(w, \"Hello!\")&#125;type WorldHandler struct &#123;&#125;func (h *WorldHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;   fmt.Fprintf(w, \"Hello!\")&#125;func main() &#123;   server := http.Server&#123;      Addr: \"127.0.0.1:8080\",   &#125;   hello := HelloHandler&#123;&#125;   world := WorldHandler&#123;&#125;   http.Handle(\"/hello\", &amp;hello)   http.Handle(\"/world\", &amp;world)   server.ListenAndServe()&#125;\n2.3  处理器函数从2.2和2.3的代码我们可以看到如果直接写处理器，那么我们需要额外定义一个结构体，这样写起来非常麻烦，所以我们有一种比较清爽的书写方式，其代码如下：\n123456789101112131415161718192021222324package mainimport (\t\"fmt\"\t\"net/http\")func hello(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\")&#125;func world(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"World!\")&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thttp.HandleFunc(\"/hello\", hello)\thttp.HandleFunc(\"/world\", world)\tserver.ListenAndServe()&#125;\n可以看到上面代码的hello和world函数和之前代码的ServeHTTP方法有着相同的签名，然后在main函数中通过http.HandleFunc函数将hello和world转换成Handler并和多路复用器绑定。\n要分析其实现原理，我们要先看http.Handle和http.HandleFunc的源码：\n首先来看http.Handle的源码：\n123func Handle(pattern string, handler Handler) &#123;     DefaultServeMux.Handle(pattern, handler) &#125;\n可以看到他第二个参数就是处理器Handler，我们发现他其实调用的是默认多路复用器DefaultServeMux的Handle方法，后者的Handle只是多了一些处理细节这里不再赘述。\n那么接下来看http.HandleFunc的源码：\n123func HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;\tDefaultServeMux.HandleFunc(pattern, handler)&#125;\n可以看到上述代码其实第二个参数是一个Handler处理器，但是其实实参是一个相同签名的其他函数，那么这个转换是通过什么进行的呢？\n我们发现这里也是调用的是默认多路复用器DefaultServeMux的HandleFunc方法，其源码如下：\n123456func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request)) &#123;\tif handler == nil &#123;\t\tpanic(\"http: nil handler\")\t&#125;\tmux.Handle(pattern, HandlerFunc(handler))&#125;\n通过观察源码答案就很清晰了，是HandlerFunc进行了转换工作。\n我们来看一下HandlerFunc的源码：\n123456type HandlerFunc func(ResponseWriter, *Request)// ServeHTTP calls f(w, r).func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request) &#123;\tf(w, r)&#125;\n看完上述代码我们可以明白其实将hello函数转换成处理器的实际代码如下：\n1HelloHandler := HandlerFunc(hello)\n看到这里想必各位已经明白，对于和ServeHTTP有相同签名的函数是如何转换成处理器Handler的了。\n\nPS：虽然处理器函数的代码更加整洁，但是处理器函数不能完全替代处理器。这是因为在某些情况下，代码可能已经包含了某个接口或者某种类型，这时我们只需要为它们添加ServeHTTP方法就可以将它们转变成处理器。\n\n2.4 串联多个处理器和处理器函数有了上面的知识铺垫，现在我们来深入探讨一下串联多个处理器（处理器函数）的做法。\n因为在GO语言中程序可以将一个函数传递给另一个函数，所以我们可以实现这个功能。\n2.4.1 串联多个处理器函数直接用例子上手，假设现在要将hello、world串联起来，其代码如下：\n123456789101112131415161718192021222324252627package mainimport (\t\"fmt\"\t\"net/http\"\t\"reflect\"\t\"runtime\")func hello(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\\n\")&#125;func world(h http.HandlerFunc) http.HandlerFunc &#123;\treturn func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"world!\\n\")\t\th(w, r)\t&#125;&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thttp.HandleFunc(\"/hello\", world(hello))\tserver.ListenAndServe()&#125;\n如果要再增加一个funny函数，其函数原型如下：\n123456func funny(h http.HandlerFunc) http.HandlerFunc &#123;\treturn func(w http.ResponseWriter, r *http.Request) &#123;\t\t...\t\th(w, r)\t&#125;&#125;\n那么只需将http.HandleFunc修改为如下：\n1http.HandleFunc(\"/hello\", funny(world(hello)))\n2.4.2 串联多个处理器同样是串联hello、world、funny，代码如下：\n1234567891011121314151617181920212223242526272829303132333435package mainimport (\t\"fmt\"\t\"net/http\")type HelloHandler struct&#123;&#125;func (h HelloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) &#123;\tfmt.Fprintf(w, \"Hello!\\n\")&#125;func world(h http.Handler) http.Handler &#123;\treturn http.HandlerFunc (func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"world!\\n\")\t\th.ServeHTTP(w, r)\t&#125;)&#125;func funny(h http.Handler) http.Handler &#123;\treturn http.HandlerFunc (func(w http.ResponseWriter, r *http.Request) &#123;\t\tfmt.Fprintf(w, \"funny!\\n\")\t\th.ServeHTTP(w, r)\t&#125;)&#125;func main() &#123;\tserver := http.Server&#123;\t\tAddr: \"127.0.0.1:8080\",\t&#125;\thello := HelloHandler&#123;&#125;\thttp.Handle(\"/hello\", funny(world(hello)))\tserver.ListenAndServe()&#125;\n参考资料：Go Web Programming\n","dateCreated":"2018-12-01T18:59:14+08:00","dateModified":"2019-04-03T00:14:14+08:00","datePublished":"2018-12-01T18:59:14+08:00","description":"\n解释处理器和处理器函数的关系\n剖析Handle、HandleFunc、Hander、HanderFunc的联系\n","headline":"处理器和处理器函数理解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/","keywords":"go-web"}</script>
+    <meta name="description" content="解释处理器和处理器函数的关系 剖析Handle、HandleFunc、Hander、HanderFunc的联系">
+<meta name="keywords" content="go-web">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="处理器和处理器函数理解">
+<meta property="og:url" content="http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/index.html">
+<meta property="og:site_name" content="0GGmr0&#39;s Blog">
+<meta property="og:description" content="解释处理器和处理器函数的关系 剖析Handle、HandleFunc、Hander、HanderFunc的联系">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:updated_time" content="2019-04-02T16:14:14.352Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="处理器和处理器函数理解">
+<meta name="twitter:description" content="解释处理器和处理器函数的关系 剖析Handle、HandleFunc、Hander、HanderFunc的联系">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/head.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-c4ozcsklz4kht2pebhp44xorvyverh23toayhn7i6ubrpyedak24hv1v0hyd.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
+    </div>
+    
+        
+            <a class="header-right-picture " href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/head.jpg" alt="作者的图片">
+                </a>
+                <h4 class="sidebar-profile-name">0ggmr0</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/ " title="首页">
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/categories" title="分类">
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/tags" title="标签">
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/archives" title="归档">
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="#about" title="关于">
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">关于</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="https://github.com/0GGmr0" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            处理器和处理器函数理解
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-12-01T18:59:14+08:00">
+	
+		    12月 01, 2018
+    	
+    </time>
+    
+        <span>发布在 </span>
+        
+    <a class="category-link" href="/categories/backend/">后端</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <blockquote>
+<p>解释处理器和处理器函数的关系</p>
+<p>剖析<code>Handle</code>、<code>HandleFunc</code>、<code>Hander</code>、<code>HanderFunc</code>的联系</p>
+</blockquote>
+<a id="more"></a>
+<h2 id="1-处理器是什么？"><a href="#1-处理器是什么？" class="headerlink" title="1 处理器是什么？"></a>1 处理器是什么？</h2><p>Web应用的工作流程如下：</p>
+<ul>
+<li>客户端将请求发送到服务器的一个URL上</li>
+<li>服务器的多路复用器将接收到的请求重定向到正确的<strong>处理器</strong>，然后由该<strong>处理器</strong>对请求进行处理</li>
+<li><strong>处理器</strong>处理请求并执行必要的动作。</li>
+<li>处理器调用模板引擎，生成相应的HTML并且将其返回给客户端</li>
+</ul>
+<p>所以简单来说处理器就是处理<strong>请求</strong>和执行<strong>动作</strong></p>
+<h2 id="2-处理器的工作原理"><a href="#2-处理器的工作原理" class="headerlink" title="2 处理器的工作原理"></a>2 处理器的工作原理</h2><h3 id="2-1-处理请求"><a href="#2-1-处理请求" class="headerlink" title="2.1 处理请求"></a>2.1 处理请求</h3><p>先来看一段代码</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"fmt"</span></span><br><span class="line">	<span class="string">"net/http"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> MyHandler <span class="keyword">struct</span>&#123;&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *MyHandler)</span> <span class="title">ServeHTTP</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">	fmt.Fprintf(w, <span class="string">"Hello World!"</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	handler := MyHandler&#123;&#125;</span><br><span class="line">	server := http.Server&#123;</span><br><span class="line">		Addr:    <span class="string">"127.0.0.1:8080"</span>,</span><br><span class="line">		Handler: &amp;handler,</span><br><span class="line">	&#125;</span><br><span class="line">	server.ListenAndServe()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>可以看到此代码是自己编写了一个处理器<code>MyHandler</code>，然后将其直接与服务器进行了绑定，以此代替原本在使用的<strong>默认多路复用器</strong>。这就意味着服务器不会再通过URL匹配来将请求路由至不同的处理器，而是直接使用同一个处理器处理所有的请求，因此无论浏览器访问什么地址，服务器返回的都是<code>Hello World!</code>。</p>
+<p>从上面代码我们可以知道要实现一个处理器我们需要实现一个<code>Handler</code>接口，其源码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Handler <span class="keyword">interface</span> &#123;</span><br><span class="line">   ServeHTTP(ResponseWriter, *Request)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="2-2-使用多个处理器"><a href="#2-2-使用多个处理器" class="headerlink" title="2.2 使用多个处理器"></a>2.2 使用多个处理器</h3><p>实际情况下我们不可能使用一个处理器去处理所有请求，所以我们最常用的就是不在<code>Server</code>里面去指定处理器，而是让服务器使用<strong>默认多路复用器</strong>，然后使用<code>http.Handle</code>函数来将处理器和<strong>多路复用器</strong>绑定。</p>
+<p>下面代码就是一个两个处理器的样例程序</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">   <span class="string">"fmt"</span></span><br><span class="line">   <span class="string">"net/http"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> HelloHandler <span class="keyword">struct</span> &#123;&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *HelloHandler)</span> <span class="title">ServeHTTP</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">   fmt.Fprintf(w, <span class="string">"Hello!"</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> WorldHandler <span class="keyword">struct</span> &#123;&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h *WorldHandler)</span> <span class="title">ServeHTTP</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">   fmt.Fprintf(w, <span class="string">"Hello!"</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">   server := http.Server&#123;</span><br><span class="line">      Addr: <span class="string">"127.0.0.1:8080"</span>,</span><br><span class="line">   &#125;</span><br><span class="line">   hello := HelloHandler&#123;&#125;</span><br><span class="line">   world := WorldHandler&#123;&#125;</span><br><span class="line">   http.Handle(<span class="string">"/hello"</span>, &amp;hello)</span><br><span class="line">   http.Handle(<span class="string">"/world"</span>, &amp;world)</span><br><span class="line"></span><br><span class="line">   server.ListenAndServe()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="2-3-处理器函数"><a href="#2-3-处理器函数" class="headerlink" title="2.3  处理器函数"></a>2.3  处理器函数</h3><p>从2.2和2.3的代码我们可以看到如果直接写处理器，那么我们需要额外定义一个结构体，这样写起来非常麻烦，所以我们有一种比较清爽的书写方式，其代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"fmt"</span></span><br><span class="line">	<span class="string">"net/http"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">hello</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">	fmt.Fprintf(w, <span class="string">"Hello!"</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">world</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">	fmt.Fprintf(w, <span class="string">"World!"</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	server := http.Server&#123;</span><br><span class="line">		Addr: <span class="string">"127.0.0.1:8080"</span>,</span><br><span class="line">	&#125;</span><br><span class="line">	http.HandleFunc(<span class="string">"/hello"</span>, hello)</span><br><span class="line">	http.HandleFunc(<span class="string">"/world"</span>, world)</span><br><span class="line"></span><br><span class="line">	server.ListenAndServe()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>可以看到上面代码的<code>hello</code>和<code>world</code>函数和之前代码的<code>ServeHTTP</code>方法有着相同的签名，然后在main函数中通过<code>http.HandleFunc</code>函数将<code>hello</code>和<code>world</code>转换成<code>Handler</code>并和多路复用器绑定。</p>
+<p>要分析其实现原理，我们要先看<code>http.Handle</code>和<code>http.HandleFunc</code>的源码：</p>
+<p>首先来看<code>http.Handle</code>的源码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">Handle</span><span class="params">(pattern <span class="keyword">string</span>, handler Handler)</span></span> &#123; </span><br><span class="line">    DefaultServeMux.Handle(pattern, handler) </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>可以看到他第二个参数就是处理器<code>Handler</code>，我们发现他其实调用的是默认多路复用器<code>DefaultServeMux</code>的<code>Handle</code>方法，后者的<code>Handle</code>只是多了一些处理细节这里不再赘述。</p>
+<p>那么接下来看<code>http.HandleFunc</code>的源码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">HandleFunc</span><span class="params">(pattern <span class="keyword">string</span>, handler <span class="keyword">func</span>(ResponseWriter, *Request)</span>)</span> &#123;</span><br><span class="line">	DefaultServeMux.HandleFunc(pattern, handler)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>可以看到上述代码其实第二个参数是一个<code>Handler</code>处理器，但是其实实参是一个相同签名的其他函数，那么这个转换是通过什么进行的呢？</p>
+<p>我们发现这里也是调用的是默认多路复用器<code>DefaultServeMux</code>的<code>HandleFunc</code>方法，其源码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(mux *ServeMux)</span> <span class="title">HandleFunc</span><span class="params">(pattern <span class="keyword">string</span>, handler <span class="keyword">func</span>(ResponseWriter, *Request)</span>)</span> &#123;</span><br><span class="line">	<span class="keyword">if</span> handler == <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="built_in">panic</span>(<span class="string">"http: nil handler"</span>)</span><br><span class="line">	&#125;</span><br><span class="line">	mux.Handle(pattern, HandlerFunc(handler))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>通过观察源码答案就很清晰了，是<code>HandlerFunc</code>进行了转换工作。</p>
+<p>我们来看一下<code>HandlerFunc</code>的源码：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> HandlerFunc <span class="function"><span class="keyword">func</span><span class="params">(ResponseWriter, *Request)</span></span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function">// <span class="title">ServeHTTP</span> <span class="title">calls</span> <span class="title">f</span><span class="params">(w, r)</span>.</span></span><br><span class="line"><span class="function"><span class="title">func</span> <span class="params">(f HandlerFunc)</span> <span class="title">ServeHTTP</span><span class="params">(w ResponseWriter, r *Request)</span></span> &#123;</span><br><span class="line">	f(w, r)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>看完上述代码我们可以明白其实将hello函数转换成处理器的实际代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">HelloHandler := HandlerFunc(hello)</span><br></pre></td></tr></table></figure>
+<p>看到这里想必各位已经明白，对于和<code>ServeHTTP</code>有相同签名的函数是如何转换成处理器<code>Handler</code>的了。</p>
+<ul>
+<li>PS：虽然处理器函数的代码更加整洁，但是处理器函数不能完全替代处理器。这是因为在某些情况下，代码可能已经包含了某个接口或者某种类型，这时我们只需要为它们添加<code>ServeHTTP</code>方法就可以将它们转变成处理器。</li>
+</ul>
+<h3 id="2-4-串联多个处理器和处理器函数"><a href="#2-4-串联多个处理器和处理器函数" class="headerlink" title="2.4 串联多个处理器和处理器函数"></a>2.4 串联多个处理器和处理器函数</h3><p>有了上面的知识铺垫，现在我们来深入探讨一下串联多个处理器（处理器函数）的做法。</p>
+<p>因为在GO语言中程序可以将一个函数传递给另一个函数，所以我们可以实现这个功能。</p>
+<h4 id="2-4-1-串联多个处理器函数"><a href="#2-4-1-串联多个处理器函数" class="headerlink" title="2.4.1 串联多个处理器函数"></a>2.4.1 串联多个处理器函数</h4><p>直接用例子上手，假设现在要将<code>hello</code>、<code>world</code>串联起来，其代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"fmt"</span></span><br><span class="line">	<span class="string">"net/http"</span></span><br><span class="line">	<span class="string">"reflect"</span></span><br><span class="line">	<span class="string">"runtime"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">hello</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">	fmt.Fprintf(w, <span class="string">"Hello!\n"</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">world</span><span class="params">(h http.HandlerFunc)</span> <span class="title">http</span>.<span class="title">HandlerFunc</span></span> &#123;</span><br><span class="line">	<span class="keyword">return</span> <span class="function"><span class="keyword">func</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">		fmt.Fprintf(w, <span class="string">"world!\n"</span>)</span><br><span class="line">		h(w, r)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	server := http.Server&#123;</span><br><span class="line">		Addr: <span class="string">"127.0.0.1:8080"</span>,</span><br><span class="line">	&#125;</span><br><span class="line">	http.HandleFunc(<span class="string">"/hello"</span>, world(hello))</span><br><span class="line">	server.ListenAndServe()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>如果要再增加一个<code>funny</code>函数，其函数原型如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">funny</span><span class="params">(h http.HandlerFunc)</span> <span class="title">http</span>.<span class="title">HandlerFunc</span></span> &#123;</span><br><span class="line">	<span class="keyword">return</span> <span class="function"><span class="keyword">func</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">		...</span><br><span class="line">		h(w, r)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>那么只需将<code>http.HandleFunc</code>修改为如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http.HandleFunc(<span class="string">"/hello"</span>, funny(world(hello)))</span><br></pre></td></tr></table></figure>
+<h4 id="2-4-2-串联多个处理器"><a href="#2-4-2-串联多个处理器" class="headerlink" title="2.4.2 串联多个处理器"></a>2.4.2 串联多个处理器</h4><p>同样是串联<code>hello</code>、<code>world</code>、<code>funny</code>，代码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"fmt"</span></span><br><span class="line">	<span class="string">"net/http"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> HelloHandler <span class="keyword">struct</span>&#123;&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(h HelloHandler)</span> <span class="title">ServeHTTP</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">	fmt.Fprintf(w, <span class="string">"Hello!\n"</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">world</span><span class="params">(h http.Handler)</span> <span class="title">http</span>.<span class="title">Handler</span></span> &#123;</span><br><span class="line">	<span class="keyword">return</span> http.HandlerFunc (<span class="function"><span class="keyword">func</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">		fmt.Fprintf(w, <span class="string">"world!\n"</span>)</span><br><span class="line">		h.ServeHTTP(w, r)</span><br><span class="line">	&#125;)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">funny</span><span class="params">(h http.Handler)</span> <span class="title">http</span>.<span class="title">Handler</span></span> &#123;</span><br><span class="line">	<span class="keyword">return</span> http.HandlerFunc (<span class="function"><span class="keyword">func</span><span class="params">(w http.ResponseWriter, r *http.Request)</span></span> &#123;</span><br><span class="line">		fmt.Fprintf(w, <span class="string">"funny!\n"</span>)</span><br><span class="line">		h.ServeHTTP(w, r)</span><br><span class="line">	&#125;)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	server := http.Server&#123;</span><br><span class="line">		Addr: <span class="string">"127.0.0.1:8080"</span>,</span><br><span class="line">	&#125;</span><br><span class="line">	hello := HelloHandler&#123;&#125;</span><br><span class="line">	http.Handle(<span class="string">"/hello"</span>, funny(world(hello)))</span><br><span class="line">	server.ListenAndServe()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>参考资料：<a href="https://livebook.manning.com/#!/book/go-web-programming/chapter-3/" target="_blank" rel="noopener">Go Web Programming</a></p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/go-web/">go-web</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01背包/" data-tooltip="01背包详解" aria-label="下一篇: 01背包详解">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/&amp;title=处理器和处理器函数理解" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 0ggmr0. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01背包/" data-tooltip="01背包详解" aria-label="下一篇: 01背包详解">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/&amp;title=处理器和处理器函数理解" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/12/01/处理器和处理器函数理解-1/&amp;title=处理器和处理器函数理解">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+            <h4 id="about-card-name">0ggmr0</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br>
+                上海
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-dbd16rvloemmuxdzniplmnxxvwoz24eya9wol0b7vvmlokgqsjivmb8dnscy.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    </body>
+</html>

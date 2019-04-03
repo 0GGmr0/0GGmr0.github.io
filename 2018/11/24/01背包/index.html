@@ -1,0 +1,458 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="0GGmr0&#39;s Blog">
+    <title>01背包详解 - 0GGmr0&#39;s Blog</title>
+    <meta name="author" content="0ggmr0">
+    
+    
+        <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为$$m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])$$\n01背包未优化情况​我理解能力比较弱，所以从一个实际例子来出发吧\n举例：​    5个物品，其(w,v)分别为  （2，3）、（4、5）、（3，7），那么从1物品到3物品逐层向上的填表结果如下图所示：\n\n\n\n🎒\n0\n1\n2\n3\n4\n5\n6\n\n\n\n\n3物品\n0\n0\n0\n7\n7\n10\n10\n\n\n2物品\n0\n0\n3\n3\n5\n5\n8\n\n\n1物品\n0\n0\n3\n3\n3\n3\n3\n\n\n\n​    原始的代码就显示非常蠢了：\n123456789for i := 0; i &lt; n; i++ &#123;    for j := 0; j &lt; w; j++ &#123;        if(j &lt; w[i]) &#123;           m[i][j] = m[i - 1][j]        &#125; else &#123;            m[i][j] = math.Max(m[i - 1][j], m[i - 1][j - w[i]] + v[i])        &#125;    &#125;&#125;\n​    上面这个奇丑无比的代码其实空间复杂度是n²，非常的爆炸，所以下面可以优化他的空间到n    \n01背包优化空间​    根据上面的推导式我们可以得出，每一次的m[i]层只和m[i - 1]层有联系，所以我们可以将二维数组直接化为一维数组，即滚动数组。    \n12345for i := 0; i &lt; n; i++ &#123;    for j := w; j &gt;= w[i]; j-- &#123;        m[j] = math.Max(m[j], m[j - w[i]] + v[i])    &#125;&#125;\n​    这里有一个注意点就是上面未优化的代码的j是从0开始递增遍历，而这里的代码是从w开始递减，这个是因为我们只有一个一维数组，每一次的遍历是要和上一次的结果进行比较的，如果我们从前往后遍历，那么最开始的那部分就会被覆盖，那么本次遍历到后面的时候发现前面的那部分都已经被覆盖掉了，代码就会崩掉了。\n","dateCreated":"2018-11-24T20:18:14+08:00","dateModified":"2019-04-02T23:05:41+08:00","datePublished":"2018-11-24T20:18:14+08:00","description":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为$$m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])$$","headline":"01背包详解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/24/01背包/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/11/24/01背包/","keywords":"背包"}</script>
+    <meta name="description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为$$m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])$$">
+<meta name="keywords" content="背包">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="01背包详解">
+<meta property="og:url" content="http://yoursite.com/2018/11/24/01背包/index.html">
+<meta property="og:site_name" content="0GGmr0&#39;s Blog">
+<meta property="og:description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为$$m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])$$">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:updated_time" content="2019-04-02T15:05:41.396Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="01背包详解">
+<meta name="twitter:description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为$$m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])$$">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/head.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-c4ozcsklz4kht2pebhp44xorvyverh23toayhn7i6ubrpyedak24hv1v0hyd.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
+    </div>
+    
+        
+            <a class="header-right-picture " href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/head.jpg" alt="作者的图片">
+                </a>
+                <h4 class="sidebar-profile-name">0ggmr0</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>author.bio</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/ " title="首页">
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/categories" title="分类">
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/tags" title="标签">
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/archives" title="归档">
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="#about" title="关于">
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">关于</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="https://github.com/0GGmr0" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            01背包详解
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-11-24T20:18:14+08:00">
+	
+		    11月 24, 2018
+    	
+    </time>
+    
+        <span>发布在 </span>
+        
+    <a class="category-link" href="/categories/algorithm/">算法</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为<br>$$<br>m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])<br>$$<br><a id="more"></a></p>
+<h3 id="01背包未优化情况​"><a href="#01背包未优化情况​" class="headerlink" title="01背包未优化情况​"></a>01背包未优化情况​</h3><p>我理解能力比较弱，所以从一个实际例子来出发吧</p>
+<h4 id="举例："><a href="#举例：" class="headerlink" title="举例："></a>举例：</h4><p>​    5个物品，其(w,v)分别为  （2，3）、（4、5）、（3，7），那么从1物品到3物品逐层向上的填表结果如下图所示：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">🎒</th>
+<th>0</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">3物品</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>7</td>
+<td>7</td>
+<td>10</td>
+<td>10</td>
+</tr>
+<tr>
+<td style="text-align:left">2物品</td>
+<td>0</td>
+<td>0</td>
+<td>3</td>
+<td>3</td>
+<td>5</td>
+<td>5</td>
+<td>8</td>
+</tr>
+<tr>
+<td style="text-align:left">1物品</td>
+<td>0</td>
+<td>0</td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+<p>​    原始的代码就显示非常蠢了：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="number">0</span>; i &lt; n; i++ &#123;</span><br><span class="line">    <span class="keyword">for</span> j := <span class="number">0</span>; j &lt; w; j++ &#123;</span><br><span class="line">        <span class="keyword">if</span>(j &lt; w[i]) &#123;</span><br><span class="line">           m[i][j] = m[i - <span class="number">1</span>][j]</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            m[i][j] = math.Max(m[i - <span class="number">1</span>][j], m[i - <span class="number">1</span>][j - w[i]] + v[i])</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>​    上面这个奇丑无比的代码其实空间复杂度是n²，非常的爆炸，所以下面可以优化他的空间到n    </p>
+<h3 id="01背包优化空间"><a href="#01背包优化空间" class="headerlink" title="01背包优化空间"></a>01背包优化空间</h3><p>​    根据上面的推导式我们可以得出，每一次的m[i]层只和m[i - 1]层有联系，所以我们可以将二维数组直接化为一维数组，即滚动数组。    </p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="number">0</span>; i &lt; n; i++ &#123;</span><br><span class="line">    <span class="keyword">for</span> j := w; j &gt;= w[i]; j-- &#123;</span><br><span class="line">        m[j] = math.Max(m[j], m[j - w[i]] + v[i])</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>​    这里有一个注意点就是上面未优化的代码的j是从0开始递增遍历，而这里的代码是从w开始递减，这个是因为我们只有一个一维数组，每一次的遍历是要和上一次的结果进行比较的，如果我们从前往后遍历，那么最开始的那部分就会被覆盖，那么本次遍历到后面的时候发现前面的那部分都已经被覆盖掉了，代码就会崩掉了。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/backpack/">背包</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/处理器和处理器函数理解-1/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01背包/&amp;title=01背包详解" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 0ggmr0. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/处理器和处理器函数理解-1/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01背包/&amp;title=01背包详解" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01背包/&amp;title=01背包详解">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+            <h4 id="about-card-name">0ggmr0</h4>
+        
+            <div id="about-card-bio"><p>author.bio</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br>
+                上海
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-dbd16rvloemmuxdzniplmnxxvwoz24eya9wol0b7vvmlokgqsjivmb8dnscy.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    </body>
+</html>
