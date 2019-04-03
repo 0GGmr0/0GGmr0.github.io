@@ -194,14 +194,16 @@
             </div>
             
                 <div class="postShorten-excerpt">
-                    <p>01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为<br>$$<br>m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])<br>$$<br>
+                    <p>01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为</p>
+<script type="math/tex; mode=display">
+m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script>
                     
                         <a href="/2018/11/24/01背包/" class="postShorten-excerpt_link link">
                             阅读全文
                         </a>
                         
                     
-                </p></div>
+                </div>
             
         </div>
         
@@ -274,5 +276,20 @@
 
 
 
-    </body>
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+</body>
 </html>
