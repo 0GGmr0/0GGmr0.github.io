@@ -11,8 +11,8 @@ cache:
 before_install:
   - npm i imagemin-mozjpeg@6.0.0
 
-install:
-  - npm install
+# install:
+#   - npm install
 
 before_script:
   - git submodule update --remote --merge
@@ -20,6 +20,7 @@ before_script:
 script:
   - hexo clean
   - hexo g
+  - hexo algolia
 after_script:
   - cd public
   - git init
