@@ -185,6 +185,7 @@ tag_pagination: true
 # 数学公式
 mathjax: 
   enable: true
+  per_page: false
   cdn: https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML
 
 # ---------------
