@@ -166,19 +166,19 @@
     <section class="postShorten-group main-content-wrap">
     
     
-    <article class="postShorten postShorten--thumbnailimg-right">
+    <article class="postShorten postShorten--thumbnailimg-bottom">
         <div class="postShorten-wrap">
             
             <div class="postShorten-header">
                 <h1 class="postShorten-title">
                     
-                        <a class="link-unstyled" href="/2019/04/04/concurrent-programming-bug-source/">
-                            java 并发编程学习之BUG源头
+                        <a class="link-unstyled" href="/2019/04/04/concurrent-programming-solve-see-sort/">
+                            java 并发编程学习之解决可见性和有序性
                         </a>
                     
                 </h1>
                 <div class="postShorten-meta">
-    <time datetime="2019-04-04T22:32:40+08:00">
+    <time datetime="2019-04-04T23:23:33+08:00">
 	
 		    4月 04, 2019
     	
@@ -194,15 +194,113 @@
 
             </div>
             
+                <div class="postShorten-content">
+                    <h2 id="Java-内存模型的概念"><a href="#Java-内存模型的概念" class="headerlink" title="Java 内存模型的概念"></a>Java 内存模型的概念</h2><p>导致可见性的原因是<strong>缓存</strong>，导致有序性的原因是<strong>编译优化</strong>，那解决这个问题最直接的办法就是<strong>禁用缓存和编译优化</strong>，但是这样程序性能就崩了。正确的方案是按需禁用。</p>
+<p>Java内存模型规范了JVM如何按需提供禁用缓存和编译优化的方法。具体来说包括<code>volatile</code>、<code>synchronized</code>、 <code>final</code>三个关键字，以及6个<code>Happens-Before</code>规则。</p>
+<h2 id="volatile使用困惑"><a href="#volatile使用困惑" class="headerlink" title="volatile使用困惑"></a>volatile使用困惑</h2><p>例如声明一个变量<code>volatile int x = 0</code>，它表达的意思是就是告诉编译器，对这个变量的读写，不能使用PCU缓存，必须从内存中读取或者写入。</p>
+<p>但是实际使用中可能会被喂屎。</p>
+<p>例如如下代码：</p>
+<p>如果线程AB执行代码。假设线程A执行write方法，<code>volatile</code>会将<code>v=true</code>写入内存，假设线程B执行<code>reader()</code>，按照<code>volatile</code>语义，线程B会从内存中读取变量V，直觉上看应该是42，实际上在JDK1.5之上一定是42，之下就可能是0或者42了。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">VolatileExample</span> </span>&#123;</span><br><span class="line">  <span class="keyword">int</span> x = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">volatile</span> <span class="keyword">boolean</span> v = <span class="keyword">false</span>;</span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">writer</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    x = <span class="number">42</span>;</span><br><span class="line">    v = <span class="keyword">true</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">reader</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (v == <span class="keyword">true</span>) &#123;</span><br><span class="line">      <span class="comment">// 这里 x 会是多少呢？</span></span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>JDK1.5之下出现0的原因就是可见性问题，Java内存模型在1.5版本对<code>volatile</code>语义进行了增强，通过一项 <code>Happens-Before</code>原则。</p>
+<h2 id="Happens-Before原则"><a href="#Happens-Before原则" class="headerlink" title="Happens-Before原则"></a>Happens-Before原则</h2><h5 id="1-程序顺序性原则"><a href="#1-程序顺序性原则" class="headerlink" title="1 程序顺序性原则"></a>1 程序顺序性原则</h5><p>这条规则指的是在一个线程中，按照程序顺序执行。例如上述程序的<code>x=42</code>发生在<code>v=true</code>之前。</p>
+<p>这个和编译器优化的调整顺序似乎有点冲突，单其实所谓顺序指的是可以用顺序的方式推演程序的执行，但是程序的执行不一定是完全顺序的，编译器只是保证结果一定是等于顺序方式推演的结果即可。过程并不重要。</p>
+<h5 id="2-volatile-变量原则"><a href="#2-volatile-变量原则" class="headerlink" title="2 volatile 变量原则"></a>2 volatile 变量原则</h5><p>这条指令指的是对一个<code>volatile</code>变量的写操作相对于后续对这个<code>volatile</code>变量的读操作可见。关联3进行理解。</p>
+<h5 id="3-传递性"><a href="#3-传递性" class="headerlink" title="3 传递性"></a>3 传递性</h5><p>这条指令指的是如果<code>A Happens-Before B</code>，<code>B Happens-Before C</code>，那么<code>A Happens-Before C</code>。对下图</p>
+<p><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-solve-see-sort-1.png" alt="p1"></p>
+<p>从图中可以看到：</p>
+<ul>
+<li><code>x=42</code>Happens-Before写变量<code>v=true</code>，这是规则1</li>
+<li>写变量<code>v=true</code>Happens-Before读变量<code>v=true</code>，这是规则2</li>
+</ul>
+<p>根据传递性可以得到<code>x=42</code> Happens-Before读变量<code>v=true</code>，也就是实现了JDK1.5对volatile语义的增强。</p>
+<h5 id="4-管程锁"><a href="#4-管程锁" class="headerlink" title="4 管程锁"></a>4 管程锁</h5><p><strong>管程</strong>是一种通用的同步原语，在Java中指的是<code>synchronized</code>。</p>
+<p>管程中的锁在Java中是隐式实现的，例如下面代码，在进入同步块之前会自动加锁，在代码块执行完自动释放，这都是编译器帮我们实现。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">synchronized</span> (<span class="keyword">this</span>) &#123; <span class="comment">// 此处自动加锁</span></span><br><span class="line">  <span class="comment">// x 是共享变量, 初始值 =10</span></span><br><span class="line">  <span class="keyword">if</span> (<span class="keyword">this</span>.x &lt; <span class="number">12</span>) &#123;</span><br><span class="line">    <span class="keyword">this</span>.x = <span class="number">12</span>; </span><br><span class="line">  &#125;  </span><br><span class="line">&#125; <span class="comment">// 此处自动解锁</span></span><br></pre></td></tr></table></figure>
+<p>可以这样理解管程中锁的规则：假设x的初始值是10，线程A执行完代码块后x的值会变成12(执行完自动释放锁)，线程B进入代码块时，可以看到A对x的写操作，也就是线程B能看到<code>x==12</code>。</p>
+<h5 id="5-线程-start-规则"><a href="#5-线程-start-规则" class="headerlink" title="5 线程 start() 规则"></a>5 线程 start() 规则</h5><p>这条规则指主线程A启动子线程B后，子线程B能看到主线程在启动子线程B前的操作。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Thread B = <span class="keyword">new</span> Thread(()-&gt;&#123;</span><br><span class="line">  <span class="comment">// 主线程调用 B.start() 之前</span></span><br><span class="line">  <span class="comment">// 所有对共享变量的修改，此处皆可见</span></span><br><span class="line">  <span class="comment">// 此例中，var==77</span></span><br><span class="line">&#125;);</span><br><span class="line"><span class="comment">// 此处对共享变量 var 修改</span></span><br><span class="line"><span class="keyword">var</span> = <span class="number">77</span>;</span><br><span class="line"><span class="comment">// 主线程启动子线程</span></span><br><span class="line">B.start();</span><br></pre></td></tr></table></figure>
+<h5 id="6-线程join-规则"><a href="#6-线程join-规则" class="headerlink" title="6 线程join() 规则"></a>6 线程join() 规则</h5><p>这条规则有关于线程等待。指的是主线程A等待子线程B的完成(主线程A通过调用子线程B的join()方法实现)，当子线程B完成后(主线程A中的join()方法返回)，主线程能看到子线程的操作。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Thread B = <span class="keyword">new</span> Thread(()-&gt;&#123;</span><br><span class="line">  <span class="comment">// 此处对共享变量 var 修改</span></span><br><span class="line">  <span class="keyword">var</span> = <span class="number">66</span>;</span><br><span class="line">&#125;);</span><br><span class="line"><span class="comment">// 例如此处对共享变量修改，</span></span><br><span class="line"><span class="comment">// 则这个修改结果对线程 B 可见</span></span><br><span class="line"><span class="comment">// 主线程启动子线程</span></span><br><span class="line">B.start();</span><br><span class="line">B.join()</span><br><span class="line"><span class="comment">// 子线程所有对共享变量的修改</span></span><br><span class="line"><span class="comment">// 在主线程调用 B.join() 之后皆可见</span></span><br><span class="line"><span class="comment">// 此例中，var==66</span></span><br></pre></td></tr></table></figure>
+<h2 id="final关键字"><a href="#final关键字" class="headerlink" title="final关键字"></a>final关键字</h2><p>final修饰变量告诉编译器：这个变量不变，随你优化。</p>
+<p>jdk1.5之后只要提供正确构造函数没有”逸出”，就不会出现问题。”逸出”不太好理解，下面的例子中，搞糟函数里面将this赋值给了全局变量global.obj，这就是”逸出”，线程通过global.obj读取x有可能读取到0。其实意思就是可能把还没有初始化完的this给丢出去，这样就会出现问题。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">final</span> <span class="keyword">int</span> x;</span><br><span class="line"><span class="comment">// 错误的构造函数</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">FinalFieldExample</span><span class="params">()</span> </span>&#123; </span><br><span class="line">  x = <span class="number">3</span>;</span><br><span class="line">  y = <span class="number">4</span>;</span><br><span class="line">  <span class="comment">// 此处就是讲 this 逸出，</span></span><br><span class="line">  global.obj = <span class="keyword">this</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<ul>
+<li><p>当一个对象包含final修饰的实例字段时，其他线程能够看到已经初始化的final实例字段，这是安全的。</p>
+</li>
+<li><p>对下列代码</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">final</span> <span class="class"><span class="keyword">class</span> <span class="title">A</span></span>&#123;&#125;</span><br><span class="line">A x  = <span class="keyword">new</span> A();</span><br></pre></td></tr></table></figure>
+<p>x不是final的，x任然需要同步</p>
+</li>
+</ul>
+<h2 id="思考题"><a href="#思考题" class="headerlink" title="思考题"></a>思考题</h2><p>有一个共享变量<code>abc</code>，在一个线程里设置了<code>abc</code> 的值，思考有哪些办法可以让其他线程能够看到<code>abc==3</code>？</p>
+<p>解答：</p>
+<ul>
+<li>使用volatile修饰abc</li>
+<li>synchronized 代码块中操作abc</li>
+<li>线程A操作共享变量abc后start()启动线程B</li>
+<li><p>线程A操作共享变量abc，线程B join A对于线程B可见</p>
+</li>
+<li><p>final int abc = 123</p>
+</li>
+</ul>
+<p>摘录自 <a href="https://time.geekbang.org/column/article/84017" target="_blank" rel="noopener">极客时间</a></p>
+
+                    
+                        
+
+                    
+                    
+                        <p>
+                            <a href="/2019/04/04/concurrent-programming-solve-see-sort/#post-footer" class="postShorten-excerpt_link link">
+                                评论和共享
+                            </a>
+                        </p>
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-right">
+        <div class="postShorten-wrap">
+            
+            <div class="postShorten-header">
+                <h1 class="postShorten-title">
+                    
+                        <a class="link-unstyled" href="/2019/04/04/concurrent-programming-bug-source/">
+                            (无标题)
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time datetime="2019-04-04T22:32:40+08:00">
+	
+		    4月 04, 2019
+    	
+    </time>
+    
+</div>
+
+            </div>
+            
                 <div class="postShorten-excerpt">
-                    <p>本篇博客为学习java并发知识的记录，如有必要会之后分为几部分。<br>
+                    <hr>
+<p>title: java 并发编程学习之BUG源头<br>date: 2019-04-04 22:32:40<br>tags: [并发]<br>categories: [JAVA]</p>
+<h2 id="mathjax-false"><a href="#mathjax-false" class="headerlink" title="mathjax: false"></a>mathjax: false</h2><h2 id="java并发BUG的来源"><a href="#java并发BUG的来源" class="headerlink" title="java并发BUG的来源"></a>java并发BUG的来源</h2><p>CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:</p>
+<ul>
+<li>CPU增加了缓存(均衡CPU和内存)  </li>
+<li>操作系统增加了线程和进程（缓解CPU和I/O） </li>
+<li>编译程序优化指令执行次序（使缓存更有效执行）
                     
                         <a href="/2019/04/04/concurrent-programming-bug-source/" class="postShorten-excerpt_link link">
                             阅读全文
                         </a>
                         
                     
-                </p></div>
+                </li></ul></div>
             
         </div>
         

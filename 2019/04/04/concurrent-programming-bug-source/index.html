@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="generator" content="0GGmr0&#39;s Blog">
-    <title>java 并发编程学习之BUG源头 - 0GGmr0&#39;s Blog</title>
+    <title> - 0GGmr0&#39;s Blog</title>
     <meta name="author" content="0ggmr0">
     
     
@@ -14,21 +14,20 @@
         <link rel="icon" href="/assets/images/favicon.ico">
     
     
-    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"本篇博客为学习java并发知识的记录，如有必要会之后分为几部分。\njava并发BUG的来源CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:\n\nCPU增加了缓存(均衡CPU和内存)  \n操作系统增加了线程和进程（缓解CPU和I/O） \n编译程序优化指令执行次序（使缓存更有效执行）  \n\n这三个解决方案也为并发带来了很多麻烦。并发编程的BUG来自于以下三部分：  \n\n缓存可见性问题单核时代，所有线程在一颗CPU上执行，CPU缓存与内存的数据一致性容易解决。因为所有线程操作同一个CPU的缓存，一个线程对缓存的写，对另外一个线程是可见的，这就是可见性。但是多核时代每颗CPU有自己的缓存，这时数据一致性就很难解决，这些线程操作的是不同的CPU缓存。这时如果两个线程同时操作自己的缓存，两线程之间就不具备可见性。\n1234567891011121314151617181920212223242526public class Test &#123;  private long count = 0;  private void add10K() &#123;    int idx = 0;    while(idx++ &lt; 10000) &#123;      count += 1;    &#125;  &#125;  public static long calc() &#123;    final Test test = new Test();    // 创建两个线程，执行 add() 操作    Thread th1 = new Thread(()-&gt;&#123;      test.add10K();    &#125;);    Thread th2 = new Thread(()-&gt;&#123;      test.add10K();    &#125;);    // 启动两个线程    th1.start();    th2.start();    // 等待两个线程执行结束    th1.join();    th2.join();    return count;  &#125;&#125;\n结果本来应该是20000，但实际情况是10000到20000之间的随机数，这个差异是因为两个线程启动时间不同造成的。\n\n线程切换带来的原子性问题\n在java中，对一个count += 1这样的语句，CPU需要执行如下三条语句：\n\n把变量count从内存加载到CPU寄存器\n在寄存器中执行+1操作\n将结果写入内存\n\n操作系统做任务切换，可以发生在任何一条CPU指令执行完，如果两个线程同时执行count+=1，那么结果极有可能还是1，这是因为因为非原子性的操作可能发生如下情况\n\n\n编译优化带来的有序性问题\n编译器为了优化性能，有时候会改变程序中语句的先后执行顺序，可能a=6,b=7最后会变成a=7,b=6，这也可能导致bug。\n例如下列代码：在获取实例 getInstance() 的方法中，我们首先判断 instance 是否为空，如果为空，则锁定 Singleton.class 并再次检查 instance 是否为空，如果还为空则创建 Singleton 的一个实例。\n123456789101112public class Singleton &#123;  static Singleton instance;  static Singleton getInstance()&#123;    if (instance == null) &#123;      synchronized(Singleton.class) &#123;        if (instance == null)          instance = new Singleton();        &#125;    &#125;    return instance;  &#125;&#125;\n假设有两个线程同时执行getInstance()方法，他们会同时发现instance == null，于是同时对Singleton加锁，此时JVM保证只有一个线程能够加锁成功，另外一个会等待。线程A会创建一个Singleton实例，之后释放锁。锁被释放后，另外一个线程B被唤醒，他尝试再次加锁，加锁成功，他检查发生instance == null是不对的，因为已经创建过实例了，所以线程B不会创建实例。看起来逻辑没问题的操作执行起来却有问题：\n我们以为的new的操作应该是：\n\n分配一块内存\n在内存M上初始化Singleton对象\n将M的地址赋值给instance变量\n\n但是实际上优化后的执行路径是：\n\n分配一块内存\n将M的地址赋值给instance变量\n在内存M上初始化Singleton对象\n\n优化后导致的问题是，假设线程A先执行getInstance()方法，当执行完指令2时恰好发生了线程切换，切换到了线程B；如果此时线程B也执行getInstance()方法，那么线程B在执行第一个判断的时候回发现instance != null，所以直接返回instance，如果我们这个时候访问它，就可能除法空指针异常。\n\n\n","dateCreated":"2019-04-04T22:32:40+08:00","dateModified":"2019-04-04T23:16:54+08:00","datePublished":"2019-04-04T22:32:40+08:00","description":"本篇博客为学习java并发知识的记录，如有必要会之后分为几部分。","headline":"java 并发编程学习之BUG源头","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/04/concurrent-programming-bug-source/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/04/concurrent-programming-bug-source/","keywords":"并发"}</script>
-    <meta name="description" content="本篇博客为学习java并发知识的记录，如有必要会之后分为几部分。">
-<meta name="keywords" content="并发">
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"\ntitle: java 并发编程学习之BUG源头date: 2019-04-04 22:32:40tags: [并发]categories: [JAVA]\nmathjax: falsejava并发BUG的来源CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:\n\nCPU增加了缓存(均衡CPU和内存)  \n操作系统增加了线程和进程（缓解CPU和I/O） \n编译程序优化指令执行次序（使缓存更有效执行）  \n这三个解决方案也为并发带来了很多麻烦。并发编程的BUG来自于以下三部分：  \n缓存可见性问题单核时代，所有线程在一颗CPU上执行，CPU缓存与内存的数据一致性容易解决。因为所有线程操作同一个CPU的缓存，一个线程对缓存的写，对另外一个线程是可见的，这就是可见性。但是多核时代每颗CPU有自己的缓存，这时数据一致性就很难解决，这些线程操作的是不同的CPU缓存。这时如果两个线程同时操作自己的缓存，两线程之间就不具备可见性。\n1234567891011121314151617181920212223242526public class Test &#123;  private long count = 0;  private void add10K() &#123;    int idx = 0;    while(idx++ &lt; 10000) &#123;      count += 1;    &#125;  &#125;  public static long calc() &#123;    final Test test = new Test();    // 创建两个线程，执行 add() 操作    Thread th1 = new Thread(()-&gt;&#123;      test.add10K();    &#125;);    Thread th2 = new Thread(()-&gt;&#123;      test.add10K();    &#125;);    // 启动两个线程    th1.start();    th2.start();    // 等待两个线程执行结束    th1.join();    th2.join();    return count;  &#125;&#125;\n结果本来应该是20000，但实际情况是10000到20000之间的随机数，这个差异是因为两个线程启动时间不同造成的。\n\n线程切换带来的原子性问题\n在java中，对一个count += 1这样的语句，CPU需要执行如下三条语句：\n\n把变量count从内存加载到CPU寄存器\n在寄存器中执行+1操作\n将结果写入内存\n\n操作系统做任务切换，可以发生在任何一条CPU指令执行完，如果两个线程同时执行count+=1，那么结果极有可能还是1，这是因为因为非原子性的操作可能发生如下情况\n\n\n编译优化带来的有序性问题\n编译器为了优化性能，有时候会改变程序中语句的先后执行顺序，可能a=6,b=7最后会变成a=7,b=6，这也可能导致bug。\n例如下列代码：在获取实例 getInstance() 的方法中，我们首先判断 instance 是否为空，如果为空，则锁定 Singleton.class 并再次检查 instance 是否为空，如果还为空则创建 Singleton 的一个实例。\n123456789101112public class Singleton &#123;  static Singleton instance;  static Singleton getInstance()&#123;    if (instance == null) &#123;      synchronized(Singleton.class) &#123;        if (instance == null)          instance = new Singleton();        &#125;    &#125;    return instance;  &#125;&#125;\n假设有两个线程同时执行getInstance()方法，他们会同时发现instance == null，于是同时对Singleton加锁，此时JVM保证只有一个线程能够加锁成功，另外一个会等待。线程A会创建一个Singleton实例，之后释放锁。锁被释放后，另外一个线程B被唤醒，他尝试再次加锁，加锁成功，他检查发生instance == null是不对的，因为已经创建过实例了，所以线程B不会创建实例。看起来逻辑没问题的操作执行起来却有问题：\n我们以为的new的操作应该是：\n\n分配一块内存\n在内存M上初始化Singleton对象\n将M的地址赋值给instance变量\n\n但是实际上优化后的执行路径是：\n\n分配一块内存\n将M的地址赋值给instance变量\n在内存M上初始化Singleton对象\n\n优化后导致的问题是，假设线程A先执行getInstance()方法，当执行完指令2时恰好发生了线程切换，切换到了线程B；如果此时线程B也执行getInstance()方法，那么线程B在执行第一个判断的时候回发现instance != null，所以直接返回instance，如果我们这个时候访问它，就可能除法空指针异常。\n\n\n摘录自(极客时间)[https://time.geekbang.org/column/article/83682]\n","dateCreated":"2019-04-04T22:32:40+08:00","dateModified":"2019-04-05T00:35:13+08:00","datePublished":"2019-04-04T22:32:40+08:00","description":"\ntitle: java 并发编程学习之BUG源头date: 2019-04-04 22:32:40tags: [并发]categories: [JAVA]\nmathjax: falsejava并发BUG的来源CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:\n\nCPU增加了缓存(均衡CPU和内存)  \n操作系统增加了线程和进程（缓解CPU和I/O） \n编译程序优化指令执行次序（使缓存更有效执行）","headline":"","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/04/concurrent-programming-bug-source/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/04/concurrent-programming-bug-source/"}</script>
+    <meta name="description" content="title: java 并发编程学习之BUG源头date: 2019-04-04 22:32:40tags: [并发]categories: [JAVA] mathjax: falsejava并发BUG的来源CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:  CPU增加了缓存(均衡CPU和内存)   操作系统增加了线程和进程（缓解CPU和I/O）  编译">
 <meta property="og:type" content="blog">
-<meta property="og:title" content="java 并发编程学习之BUG源头">
+<meta property="og:title" content="0GGmr0&#39;s Blog">
 <meta property="og:url" content="http://yoursite.com/2019/04/04/concurrent-programming-bug-source/index.html">
 <meta property="og:site_name" content="0GGmr0&#39;s Blog">
-<meta property="og:description" content="本篇博客为学习java并发知识的记录，如有必要会之后分为几部分。">
+<meta property="og:description" content="title: java 并发编程学习之BUG源头date: 2019-04-04 22:32:40tags: [并发]categories: [JAVA] mathjax: falsejava并发BUG的来源CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:  CPU增加了缓存(均衡CPU和内存)   操作系统增加了线程和进程（缓解CPU和I/O）  编译">
 <meta property="og:locale" content="zh-cn">
-<meta property="og:image" content="http://yoursite.com/Users/0ggmr0/Library/Application%20Support/typora-user-images/image-20190404230048449.png">
-<meta property="og:updated_time" content="2019-04-04T15:16:54.861Z">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/WX20190404-231936.png">
+<meta property="og:updated_time" content="2019-04-04T16:35:13.469Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="java 并发编程学习之BUG源头">
-<meta name="twitter:description" content="本篇博客为学习java并发知识的记录，如有必要会之后分为几部分。">
-<meta name="twitter:image" content="http://yoursite.com/Users/0ggmr0/Library/Application%20Support/typora-user-images/image-20190404230048449.png">
+<meta name="twitter:title" content="0GGmr0&#39;s Blog">
+<meta name="twitter:description" content="title: java 并发编程学习之BUG源头date: 2019-04-04 22:32:40tags: [并发]categories: [JAVA] mathjax: falsejava并发BUG的来源CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:  CPU增加了缓存(均衡CPU和内存)   操作系统增加了线程和进程（缓解CPU和I/O）  编译">
+<meta name="twitter:image" content="http://pp9dbwrqy.bkt.clouddn.com/WX20190404-231936.png">
     
     
         
@@ -173,7 +172,7 @@
         <div class="post-header main-content-wrap text-left">
     
         <h1 class="post-title">
-            java 并发编程学习之BUG源头
+            (无标题)
         </h1>
     
     
@@ -184,12 +183,6 @@
     	
     </time>
     
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/JAVA/">JAVA</a>
-
-
-    
 </div>
 
     
@@ -198,15 +191,14 @@
     
     <div class="post-content markdown">
         <div class="main-content-wrap">
-            <p>本篇博客为学习java并发知识的记录，如有必要会之后分为几部分。<br><a id="more"></a></p>
-<h2 id="java并发BUG的来源"><a href="#java并发BUG的来源" class="headerlink" title="java并发BUG的来源"></a>java并发BUG的来源</h2><p>CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:</p>
+            <hr>
+<p>title: java 并发编程学习之BUG源头<br>date: 2019-04-04 22:32:40<br>tags: [并发]<br>categories: [JAVA]</p>
+<h2 id="mathjax-false"><a href="#mathjax-false" class="headerlink" title="mathjax: false"></a>mathjax: false</h2><h2 id="java并发BUG的来源"><a href="#java并发BUG的来源" class="headerlink" title="java并发BUG的来源"></a>java并发BUG的来源</h2><p>CPU、内存、I/O设备的速度不匹配问题一直存在，为解决速度的差异，计算机有如下三个优化:</p>
 <ul>
 <li>CPU增加了缓存(均衡CPU和内存)  </li>
 <li>操作系统增加了线程和进程（缓解CPU和I/O） </li>
-<li>编译程序优化指令执行次序（使缓存更有效执行）  </li>
-</ul>
-<p>这三个解决方案也为并发带来了很多麻烦。并发编程的BUG来自于以下三部分：  </p>
-<ul>
+<li>编译程序优化指令执行次序（使缓存更有效执行）  <a id="more"></a>
+这三个解决方案也为并发带来了很多麻烦。并发编程的BUG来自于以下三部分：  </li>
 <li><p><strong>缓存可见性问题</strong><br>单核时代，所有线程在一颗CPU上执行，CPU缓存与内存的数据一致性容易解决。因为所有线程操作同一个CPU的缓存，一个线程对缓存的写，对另外一个线程是可见的，这就是可见性。<br>但是多核时代每颗CPU有自己的缓存，这时数据一致性就很难解决，这些线程操作的是不同的CPU缓存。这时如果两个线程同时操作自己的缓存，两线程之间就不具备可见性。</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">Test</span> </span>&#123;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">long</span> count = <span class="number">0</span>;</span><br><span class="line">  <span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">add10K</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> idx = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">while</span>(idx++ &lt; <span class="number">10000</span>) &#123;</span><br><span class="line">      count += <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">long</span> <span class="title">calc</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">final</span> Test test = <span class="keyword">new</span> Test();</span><br><span class="line">    <span class="comment">// 创建两个线程，执行 add() 操作</span></span><br><span class="line">    Thread th1 = <span class="keyword">new</span> Thread(()-&gt;&#123;</span><br><span class="line">      test.add10K();</span><br><span class="line">    &#125;);</span><br><span class="line">    Thread th2 = <span class="keyword">new</span> Thread(()-&gt;&#123;</span><br><span class="line">      test.add10K();</span><br><span class="line">    &#125;);</span><br><span class="line">    <span class="comment">// 启动两个线程</span></span><br><span class="line">    th1.start();</span><br><span class="line">    th2.start();</span><br><span class="line">    <span class="comment">// 等待两个线程执行结束</span></span><br><span class="line">    th1.join();</span><br><span class="line">    th2.join();</span><br><span class="line">    <span class="keyword">return</span> count;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>结果本来应该是20000，但实际情况是10000到20000之间的随机数，这个差异是因为两个线程启动时间不同造成的。</p>
@@ -219,7 +211,7 @@
 <li>将结果写入内存</li>
 </ul>
 <p>操作系统做任务切换，可以发生在任何一条CPU指令执行完，如果两个线程同时执行count+=1，那么结果极有可能还是1，这是因为因为非原子性的操作可能发生如下情况</p>
-<p><img src="/Users/0ggmr0/Library/Application Support/typora-user-images/image-20190404230048449.png" alt="image-20190404230048449"></p>
+<p><img src="http://pp9dbwrqy.bkt.clouddn.com/WX20190404-231936.png" alt="image-20190404230048449"></p>
 </li>
 <li><p><strong>编译优化带来的有序性问题</strong></p>
 <p>编译器为了优化性能，有时候会改变程序中语句的先后执行顺序，可能<code>a=6,b=7</code>最后会变成<code>a=7,b=6</code>，这也可能导致bug。</p>
@@ -241,6 +233,7 @@
 <p>优化后导致的问题是，假设线程A先执行<code>getInstance()</code>方法，当执行完指令2时恰好发生了线程切换，切换到了线程B；如果此时线程B也执行<code>getInstance()</code>方法，那么线程B在执行第一个判断的时候回发现<code>instance != null</code>，所以直接返回<code>instance</code>，如果我们这个时候访问它，就可能除法空指针异常。</p>
 </li>
 </ul>
+<p>摘录自(极客时间)[<a href="https://time.geekbang.org/column/article/83682" target="_blank" rel="noopener">https://time.geekbang.org/column/article/83682</a>]</p>
 
             
 
@@ -248,20 +241,14 @@
     </div>
     <div id="post-footer" class="post-footer main-content-wrap">
         
-            <div class="post-footer-tags">
-                <span class="text-color-light text-small">标签</span><br>
-                
-    <a class="tag tag--primary tag--small t-link" href="/tags/并发/">并发</a>
-
-            </div>
-        
         
             <div class="post-actions-wrap">
     <nav>
         <ul class="post-actions post-action-nav">
             <li class="post-action">
                 
-                    <a class="post-action-btn btn btn--disabled">
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/04/concurrent-programming-solve-see-sort/" data-tooltip="java 并发编程学习之解决可见性和有序性" aria-label="上一篇: java 并发编程学习之解决可见性和有序性">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -288,7 +275,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/04/concurrent-programming-bug-source/&amp;title=java 并发编程学习之BUG源头" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/04/concurrent-programming-bug-source/&amp;title=" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -330,7 +317,8 @@
         <ul class="post-actions post-action-nav">
             <li class="post-action">
                 
-                    <a class="post-action-btn btn btn--disabled">
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/04/concurrent-programming-solve-see-sort/" data-tooltip="java 并发编程学习之解决可见性和有序性" aria-label="上一篇: java 并发编程学习之解决可见性和有序性">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -357,7 +345,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/04/concurrent-programming-bug-source/&amp;title=java 并发编程学习之BUG源头" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/04/concurrent-programming-bug-source/&amp;title=" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -385,7 +373,7 @@
                 
                 
                 <li class="share-option">
-                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/04/concurrent-programming-bug-source/&amp;title=java 并发编程学习之BUG源头">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/04/concurrent-programming-bug-source/&amp;title=">
                         <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
                     </a>
                 </li>
