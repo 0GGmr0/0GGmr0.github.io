@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="generator" content="0GGmr0&#39;s Blog">
-    <title>01背包详解 - 0GGmr0&#39;s Blog</title>
+    <title>酷家乐面试记录 - 0GGmr0&#39;s Blog</title>
     <meta name="author" content="0ggmr0">
     
     
@@ -14,19 +14,19 @@
         <link rel="icon" href="/assets/images/favicon.ico">
     
     
-    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])\n01背包未优化情况​我理解能力比较弱，所以从一个实际例子来出发吧\n举例：​    5个物品，其(w,v)分别为  （2，3）、（4、5）、（3，7），那么从1物品到3物品逐层向上的填表结果如下图所示：\n\n\n\n\n🎒\n0\n1\n2\n3\n4\n5\n6\n\n\n\n\n3物品\n0\n0\n0\n7\n7\n10\n10\n\n\n2物品\n0\n0\n3\n3\n5\n5\n8\n\n\n1物品\n0\n0\n3\n3\n3\n3\n3\n\n\n\n\n​    原始的代码就显示非常蠢了：\n123456789for i := 0; i &lt; n; i++ &#123;    for j := 0; j &lt; w; j++ &#123;        if(j &lt; w[i]) &#123;           m[i][j] = m[i - 1][j]        &#125; else &#123;            m[i][j] = math.Max(m[i - 1][j], m[i - 1][j - w[i]] + v[i])        &#125;    &#125;&#125;\n​    上面这个奇丑无比的代码其实空间复杂度是n²，非常的爆炸，所以下面可以优化他的空间到n    \n01背包优化空间​    根据上面的推导式我们可以得出，每一次的m[i]层只和m[i - 1]层有联系，所以我们可以将二维数组直接化为一维数组，即滚动数组。    \n12345for i := 0; i &lt; n; i++ &#123;    for j := w; j &gt;= w[i]; j-- &#123;        m[j] = math.Max(m[j], m[j - w[i]] + v[i])    &#125;&#125;\n​    这里有一个注意点就是上面未优化的代码的j是从0开始递增遍历，而这里的代码是从w开始递减，这个是因为我们只有一个一维数组，每一次的遍历是要和上一次的结果进行比较的，如果我们从前往后遍历，那么最开始的那部分就会被覆盖，那么本次遍历到后面的时候发现前面的那部分都已经被覆盖掉了，代码就会崩掉了。\n","dateCreated":"2018-11-24T20:18:14+08:00","dateModified":"2019-04-04T10:50:26+08:00","datePublished":"2018-11-24T20:18:14+08:00","description":"01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为\n\nm[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])","headline":"01背包详解","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/11/24/01backpack/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/11/24/01backpack/","keywords":"背包"}</script>
-    <meta name="description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为  m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])">
-<meta name="keywords" content="背包">
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"除了给上大丢人了的大摩的笔试，酷家乐是我真正意义上第一家去参加面试的公司，感触有很多，在这里记录一下面试题和感触。\n一面一面是算法面，面试官抱着一堆印满了题目的面试题进来，不用我自我介绍就开始了面试，题目整体不算很难，很考察细节问题，所有的问题如下：  \n\n单向链表如何判环？ 如果单向链表有环，那么如何寻找入环点？\n有向图如何判环？\n给定一个有序的数组，数组元素可能重复，比如345666689，输入一个数，找出他的起始位置和结束位置，要求时间复杂度为$O(log_n)$\n给定一个$m*n$二维数组，从左到右递增，从上到下递增。给定一个数，判断其是否在矩阵中，使用$O(n+m)$的复杂度。  \n\n一面的最后一题我要吐槽一下，我其实秒出了答案，但是被面试官说了一句不对，结果我就懵了。。。回来想想我的想法没问题啊。。只怪自己第一次面试太紧张了  \n二面二面是主管面，全面崩盘，主管大人是真的强，面的服服帖帖的。\n\n第一道题目就是让设计一个便利店购物系统，一个看似简单的题目，设计起类图来真的全是bug，主管大人看到第三个需求就看不下去了。。。。菜到哭泣。  \n被问到设计模式，不会。\n问了一个很简单的智力题，给一个大长方形，挖空一个小长方形，问有没有一种可能可以找到一条能正好让大长方形面积一分为二的线，如果有的话有几条？\n\n可能二面就是因为最后一个智力题秒出，然后主管大人才给了三面的面试机会吧  \n三面三面是一道上机题，说的通俗一点就是给定一个杂序的一维数组，通过两两交换的形式（这两个元素不一定相邻），将数组还原成从小到大排序的形式。要注意的是数组中的元素可能发生重复，最多重复4次。三面我一开始读错题了，花了好久去重载sort。。。。最后一个半小时还写了一个bug版本，难受。\n总结总体来说，酷家乐之行不论结果如何，这都是一次让我收获很多的面试，面试没有我想的那么可怕，但是也真的很难，尤其是主管面，把面向对象一问就问出来了，我那边学的是真烂，前路漫漫还需努力啊。ps：一下午连着面试一、二、三是真的刺激，从2点半面试到了7点，从来没有这么刺激过。\n","dateCreated":"2018-04-04T18:59:14+08:00","dateModified":"2019-04-04T17:07:59+08:00","datePublished":"2018-04-04T18:59:14+08:00","description":"除了给上大丢人了的大摩的笔试，酷家乐是我真正意义上第一家去参加面试的公司，感触有很多，在这里记录一下面试题和感触。","headline":"酷家乐面试记录","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2018/04/04/kjl-interview/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2018/04/04/kjl-interview/","keywords":"面试"}</script>
+    <meta name="description" content="除了给上大丢人了的大摩的笔试，酷家乐是我真正意义上第一家去参加面试的公司，感触有很多，在这里记录一下面试题和感触。">
+<meta name="keywords" content="面试">
 <meta property="og:type" content="blog">
-<meta property="og:title" content="01背包详解">
-<meta property="og:url" content="http://yoursite.com/2018/11/24/01backpack/index.html">
+<meta property="og:title" content="酷家乐面试记录">
+<meta property="og:url" content="http://yoursite.com/2018/04/04/kjl-interview/index.html">
 <meta property="og:site_name" content="0GGmr0&#39;s Blog">
-<meta property="og:description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为  m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])">
+<meta property="og:description" content="除了给上大丢人了的大摩的笔试，酷家乐是我真正意义上第一家去参加面试的公司，感触有很多，在这里记录一下面试题和感触。">
 <meta property="og:locale" content="zh-cn">
-<meta property="og:updated_time" content="2019-04-04T02:50:26.945Z">
+<meta property="og:updated_time" content="2019-04-04T09:07:59.733Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="01背包详解">
-<meta name="twitter:description" content="01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为  m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])">
+<meta name="twitter:title" content="酷家乐面试记录">
+<meta name="twitter:description" content="除了给上大丢人了的大摩的笔试，酷家乐是我真正意义上第一家去参加面试的公司，感触有很多，在这里记录一下面试题和感触。">
     
     
         
@@ -171,20 +171,20 @@
         <div class="post-header main-content-wrap text-left">
     
         <h1 class="post-title">
-            01背包详解
+            酷家乐面试记录
         </h1>
     
     
         <div class="post-meta">
-    <time datetime="2018-11-24T20:18:14+08:00">
+    <time datetime="2018-04-04T18:59:14+08:00">
 	
-		    11月 24, 2018
+		    4月 04, 2018
     	
     </time>
     
         <span>发布在 </span>
         
-    <a class="category-link" href="/categories/algorithm/">算法</a>
+    <a class="category-link" href="/categories/experience/">经验</a>
 
 
     
@@ -196,65 +196,24 @@
     
     <div class="post-content markdown">
         <div class="main-content-wrap">
-            <p>01背包的原理其实很简单，其实就是从不放背包的情况下一层层去比较放入这个物品后的背包价值和不放入物品的价值的比较谁大。即其公式主要为</p>
-<script type="math/tex; mode=display">
-m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
-<h3 id="01背包未优化情况​"><a href="#01背包未优化情况​" class="headerlink" title="01背包未优化情况​"></a>01背包未优化情况​</h3><p>我理解能力比较弱，所以从一个实际例子来出发吧</p>
-<h4 id="举例："><a href="#举例：" class="headerlink" title="举例："></a>举例：</h4><p>​    5个物品，其(w,v)分别为  （2，3）、（4、5）、（3，7），那么从1物品到3物品逐层向上的填表结果如下图所示：</p>
-<div class="table-container">
-<table>
-<thead>
-<tr>
-<th style="text-align:left">🎒</th>
-<th>0</th>
-<th>1</th>
-<th>2</th>
-<th>3</th>
-<th>4</th>
-<th>5</th>
-<th>6</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">3物品</td>
-<td>0</td>
-<td>0</td>
-<td>0</td>
-<td>7</td>
-<td>7</td>
-<td>10</td>
-<td>10</td>
-</tr>
-<tr>
-<td style="text-align:left">2物品</td>
-<td>0</td>
-<td>0</td>
-<td>3</td>
-<td>3</td>
-<td>5</td>
-<td>5</td>
-<td>8</td>
-</tr>
-<tr>
-<td style="text-align:left">1物品</td>
-<td>0</td>
-<td>0</td>
-<td>3</td>
-<td>3</td>
-<td>3</td>
-<td>3</td>
-<td>3</td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>​    原始的代码就显示非常蠢了：</p>
-<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="number">0</span>; i &lt; n; i++ &#123;</span><br><span class="line">    <span class="keyword">for</span> j := <span class="number">0</span>; j &lt; w; j++ &#123;</span><br><span class="line">        <span class="keyword">if</span>(j &lt; w[i]) &#123;</span><br><span class="line">           m[i][j] = m[i - <span class="number">1</span>][j]</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            m[i][j] = math.Max(m[i - <span class="number">1</span>][j], m[i - <span class="number">1</span>][j - w[i]] + v[i])</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>​    上面这个奇丑无比的代码其实空间复杂度是n²，非常的爆炸，所以下面可以优化他的空间到n    </p>
-<h3 id="01背包优化空间"><a href="#01背包优化空间" class="headerlink" title="01背包优化空间"></a>01背包优化空间</h3><p>​    根据上面的推导式我们可以得出，每一次的m[i]层只和m[i - 1]层有联系，所以我们可以将二维数组直接化为一维数组，即滚动数组。    </p>
-<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> i := <span class="number">0</span>; i &lt; n; i++ &#123;</span><br><span class="line">    <span class="keyword">for</span> j := w; j &gt;= w[i]; j-- &#123;</span><br><span class="line">        m[j] = math.Max(m[j], m[j - w[i]] + v[i])</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>​    这里有一个注意点就是上面未优化的代码的j是从0开始递增遍历，而这里的代码是从w开始递减，这个是因为我们只有一个一维数组，每一次的遍历是要和上一次的结果进行比较的，如果我们从前往后遍历，那么最开始的那部分就会被覆盖，那么本次遍历到后面的时候发现前面的那部分都已经被覆盖掉了，代码就会崩掉了。</p>
+            <p>除了给上大丢人了的大摩的笔试，酷家乐是我真正意义上第一家去参加面试的公司，感触有很多，在这里记录一下面试题和感触。<br><a id="more"></a></p>
+<h2 id="一面"><a href="#一面" class="headerlink" title="一面"></a>一面</h2><p>一面是算法面，面试官抱着一堆印满了题目的面试题进来，不用我自我介绍就开始了面试，题目整体不算很难，很考察细节问题，所有的问题如下：  </p>
+<ul>
+<li>单向链表如何判环？ 如果单向链表有环，那么如何寻找入环点？</li>
+<li>有向图如何判环？</li>
+<li>给定一个有序的数组，数组元素可能重复，比如345666689，输入一个数，找出他的起始位置和结束位置，要求时间复杂度为$O(log_n)$</li>
+<li>给定一个$m*n$二维数组，从左到右递增，从上到下递增。给定一个数，判断其是否在矩阵中，使用$O(n+m)$的复杂度。  </li>
+</ul>
+<p>一面的最后一题我要吐槽一下，我其实秒出了答案，但是被面试官说了一句不对，结果我就懵了。。。回来想想我的想法没问题啊。。只怪自己第一次面试太紧张了  </p>
+<h2 id="二面"><a href="#二面" class="headerlink" title="二面"></a>二面</h2><p>二面是主管面，全面崩盘，主管大人是真的强，面的服服帖帖的。</p>
+<ul>
+<li>第一道题目就是让设计一个便利店购物系统，一个看似简单的题目，设计起类图来真的全是bug，主管大人看到第三个需求就看不下去了。。。。菜到哭泣。  </li>
+<li>被问到设计模式，不会。</li>
+<li>问了一个很简单的智力题，给一个大长方形，挖空一个小长方形，问有没有一种可能可以找到一条能正好让大长方形面积一分为二的线，如果有的话有几条？</li>
+</ul>
+<p>可能二面就是因为最后一个智力题秒出，然后主管大人才给了三面的面试机会吧  </p>
+<h2 id="三面"><a href="#三面" class="headerlink" title="三面"></a>三面</h2><p>三面是一道上机题，说的通俗一点就是给定一个杂序的一维数组，通过两两交换的形式（这两个元素不一定相邻），将数组还原成从小到大排序的形式。要注意的是数组中的元素可能发生重复，最多重复4次。<br>三面我一开始读错题了，花了好久去重载sort。。。。最后一个半小时还写了一个bug版本，难受。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>总体来说，酷家乐之行不论结果如何，这都是一次让我收获很多的面试，面试没有我想的那么可怕，但是也真的很难，尤其是主管面，把面向对象一问就问出来了，我那边学的是真烂，前路漫漫还需努力啊。<br>ps：一下午连着面试一、二、三是真的刺激，从2点半面试到了7点，从来没有这么刺激过。</p>
 
             
 
@@ -265,7 +224,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             <div class="post-footer-tags">
                 <span class="text-color-light text-small">标签</span><br>
                 
-    <a class="tag tag--primary tag--small t-link" href="/tags/backpack/">背包</a>
+    <a class="tag tag--primary tag--small t-link" href="/tags/interview/">面试</a>
 
             </div>
         
@@ -276,7 +235,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/processor-and-processorFunctions/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01backpack/" data-tooltip="01背包详解" aria-label="上一篇: 01背包详解">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -284,8 +243,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             </li>
             <li class="post-action">
                 
-                    
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/04/04/kjl-interview/" data-tooltip="酷家乐面试记录" aria-label="下一篇: 酷家乐面试记录">
+                    <a class="post-action-btn btn btn--disabled">
                 
                     <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
@@ -303,7 +261,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01backpack/&amp;title=01背包详解" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/04/04/kjl-interview/&amp;title=酷家乐面试记录" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -346,7 +304,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/12/01/processor-and-processorFunctions/" data-tooltip="处理器和处理器函数理解" aria-label="上一篇: 处理器和处理器函数理解">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/11/24/01backpack/" data-tooltip="01背包详解" aria-label="上一篇: 01背包详解">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
@@ -354,8 +312,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             </li>
             <li class="post-action">
                 
-                    
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/04/04/kjl-interview/" data-tooltip="酷家乐面试记录" aria-label="下一篇: 酷家乐面试记录">
+                    <a class="post-action-btn btn btn--disabled">
                 
                     <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
@@ -373,7 +330,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01backpack/&amp;title=01背包详解" title="分享到 QQ">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/04/04/kjl-interview/&amp;title=酷家乐面试记录" title="分享到 QQ">
                     <i class="fab fa-qq" aria-hidden="true"></i>
                 </a>
             </li>
@@ -401,7 +358,7 @@ m[i,j]=max(m[i-1][j-weight[i]]+value[i], m[i-1][j])</script><a id="more"></a>
                 
                 
                 <li class="share-option">
-                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/11/24/01backpack/&amp;title=01背包详解">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2018/04/04/kjl-interview/&amp;title=酷家乐面试记录">
                         <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
                     </a>
                 </li>
