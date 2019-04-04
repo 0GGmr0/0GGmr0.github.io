@@ -81,21 +81,21 @@ pagination_dir: page
 ## Themes: https://hexo.io/themes/
 theme: tranquilpeak
 
-algolia:
-  appId: "TZ473X58WQ"
-  apiKey: "b34f9bb20db973ea995f3a331760ced4"
-  adminApiKey: "1c06a1e50b8357bf5f8918f9791cc9d8"
-  chunkSize: 5000
-  indexName: "tranquilpeak"
-  fields:
-    - title
-    - date
-    - permalink
-    - thumbnailImageUrl
-    - tags
-    - categories
-    - excerpt
-    - excerpt:strip
+# algolia:
+#   appId: "TZ473X58WQ"
+#   apiKey: "b34f9bb20db973ea995f3a331760ced4"
+#   adminApiKey: "1c06a1e50b8357bf5f8918f9791cc9d8"
+#   chunkSize: 5000
+#   indexName: "tranquilpeak"
+#   fields:
+#     - title
+#     - date
+#     - permalink
+#     - thumbnailImageUrl
+#     - tags
+#     - categories
+#     - excerpt
+#     - excerpt:strip
 
 # Deployment
 ## Docs: https://hexo.io/docs/deployment.html
