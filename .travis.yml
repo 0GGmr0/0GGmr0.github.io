@@ -8,8 +8,8 @@ cache:
   directories:
     - node_modules
 
-before_install:
-  - npm i imagemin-mozjpeg@6.0.0
+# before_install:
+#   - npm i imagemin-mozjpeg@6.0.0
 
 # install:
 #   - npm install

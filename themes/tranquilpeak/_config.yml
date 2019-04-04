@@ -183,7 +183,9 @@ category_pagination: true
 tag_pagination: true
 
 # 数学公式
-mathjax: true
+mathjax: 
+  enable: true
+  cdn: https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML
 
 # ---------------
 # Comment systems
