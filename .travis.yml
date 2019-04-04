@@ -4,9 +4,9 @@ os:
 language: node_js
 node_js: stable
 
-cache:
-  directories:
-    - node_modules
+# cache:
+#   directories:
+#     - node_modules
 
 # before_install:
 #   - npm i imagemin-mozjpeg@6.0.0
@@ -14,8 +14,8 @@ cache:
 # install:
 #   - npm install
 
-before_script:
-  - git submodule update --remote --merge
+# before_script:
+#   - git submodule update --remote --merge
 
 script:
   - hexo clean
@@ -28,7 +28,7 @@ after_script:
   - git config user.email "18817619557@qq.com"
   - git add .
   - git commit -m "Update docs"
-  - git push --force "https://${GH_TOKEN}@${GH_REF}" master:master
+  - git push "https://${GH_TOKEN}@${GH_REF}" master:master
 branches:
   only:
     - source-code
