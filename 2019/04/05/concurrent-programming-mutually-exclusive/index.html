@@ -1,0 +1,441 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="0GGmr0&#39;s Blog">
+    <title>Java并发编程学习之互斥锁 - 0GGmr0&#39;s Blog</title>
+    <meta name="author" content="0ggmr0">
+    
+    
+        <!-- <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico"> -->
+        <link rel="icon" href="/assets/images/favicon.ico">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"摘录自 极客时间\n解决原子性问题原子性一个或者多个操作在CPU执行过程中不被中断的特性例如long型变量在32位机器上读写可能会出现bug，因为long是64位的，需要两次写操作，极有可能因为线程切换的问题导致写入的变量和读出来的变量不一致。一个简单暴力的解决原子性问题的方法就是禁用CPU中断（也就是禁止线程切换），但是在多核场景下显然这么干是没有用的，它只能保证CPU上线程连续执行，但是不能保证同一时刻只有一个线程执行。“为了让同一时刻只有一个线程执行”，即互斥。我们可以用过加锁来实现。  \n简易锁模型对临界区加锁即可，锁模型大概如下:这里一定要注意的一点就是，一定要保证锁锁的是自己家的资源，不要去保护其他家的资源。  \nJava锁技术: synchronizedsynchronized用法如下所示：1234567891011121314151617181920212223242526class X &#123;  // 修饰非静态方法  // 锁定当前实例对象的this  synchronized void foo() &#123;    // 临界区  &#125;  // 修饰静态方法  // 锁定X.class  synchronized static void bar() &#123;    // 临界区  &#125;  //上面这个其实相当于:  //class X &#123;  //    synchronized(X.class) static void bar() &#123;  //    &#125;  //&#125;  // 修饰代码块  Object obj = new Object()；  void baz() &#123;    // 锁定了obj对象    synchronized(obj) &#123;      // 临界区    &#125;  &#125;&#125;\nJava编译器会在synchronized修饰的方法或者代码块的前后自动加上加锁lock()和解锁unlock()  \n用synchronized解决 count += 1123456789class SafeCalc &#123;  long value = 0L;  synchronized long get() &#123;    return value;  &#125;  synchronized void addOne() &#123;    value += 1;  &#125;&#125;\n被synchronized修饰了的addOne()方法没有了原子性问题，有关可见性问题，Happens-Before管程中锁的原则说明了\n\n对一个锁的解锁 Happens-Before 于后续对这个锁的加锁。所以前一个线程在临界区修改的共享变量对于后续进入临界区的线程是可见的。  \n\n上面代码转换成锁模型就是下图所示：  \n锁和被保护资源的关系受保护的资源和锁之间的关联是$N:1$的关系，即一个锁可以用来保护多个资源。对上面那个例子，如果把addOne()方法改成静态的，此时get()和addOne()方法就出问题了123456789class SafeCalc &#123;  static long value = 0L;  synchronized long get() &#123;    return value;  &#125;  synchronized static void addOne() &#123;    value += 1;  &#125;&#125;\n改动后的代码两个锁用来保护一个资源，受保护的是value变量，两个锁分别是this和SafeCalc.class。可以用下图说明:addOne()对value的修改对get()没有可见性保证，所以有并发问题。\n用一把锁保护多个资源保护没有关联关系的多个资源可以使用多个锁，各自负责自己的事物，如下图代码:1234567891011121314151617181920212223242526272829303132333435363738class Account &#123;  // 锁：保护账户余额  private final Object balLock = new Object();  // 账户余额    private Integer balance;  // 锁：保护账户密码  private final Object pwLock = new Object();  // 账户密码  private String password;  // 取款  void withdraw(Integer amt) &#123;    synchronized(balLock) &#123;      if (this.balance &gt; amt)&#123;        this.balance -= amt;      &#125;    &#125;  &#125;   // 查看余额  Integer getBalance() &#123;    synchronized(balLock) &#123;      return balance;    &#125;  &#125;  // 更改密码  void updatePassword(String pw)&#123;    synchronized(pwLock) &#123;      this.password = pw;    &#125;  &#125;   // 查看密码  String getPassword() &#123;    synchronized(pwLock) &#123;      return password;    &#125;  &#125;&#125;\n当然也可以使用this一把锁来管理账户类里面所有的资源，但是这样性能血炸。用不同的锁对受保护资源进行精细化管理，能提升性能，这种锁叫做细粒度锁。这里要注意的一点是，不能使用balance这种可变变量作为互斥锁，因为它发生变化后变量就发生改变了，就没有加锁的意义了。  \n保护有关联的多个资源不正确的姿势用银行账户A给账户B转账就是一个有关联的操作。对下面代码:1234567891011class Account &#123;  private int balance;  // 转账  synchronized void transfer(      Account target, int amt)&#123;    if (this.balance &gt; amt) &#123;      this.balance -= amt;      target.balance += amt;    &#125;  &#125; &#125;\n看似synchronized实现了功能，但是this.balance和target.balance不是都属于this的，this守护不了target的内容。那么上面的代码执行起，假设有三个账户A、B、C，余额都是200，账户A给B转100，B给C转100，理论上最后B的余额是200。但是实际上，假设线程1执行A给B转账，锁定了A.this；线程2执行B给C转账，锁定了B.this，两个线程可以同时进入临界区transfer()。线程12都会读到账户B的余额是200，然后执行结束后可能的结果是100（1在2之后写）或者300（1在2之前写），但是就是不可能是200。  \n正确的姿势一种做法是在构造函数中传入一个相同的锁变量，让资源共享。12345678910111213141516171819202122232425262728293031323334class Account &#123;  private Object lock；  private int balance;  private Account();  // 创建 Account 时传入同一个 lock 对象  public Account(Object lock) &#123;    this.lock = lock;  &#125;   // 转账  void transfer(Account target, int amt)&#123;    // 此处检查所有对象共享的锁    synchronized(lock) &#123;      if (this.balance &gt; amt) &#123;        this.balance -= amt;        target.balance += amt;      &#125;    &#125;  &#125;&#125;```  这个方案局限性很大，实际上还有一种更简单的方式，用`Account.class`，它是java虚拟机在加载类的时候创建的，是唯一的:```javaclass Account &#123;  private int balance;  // 转账  void transfer(Account target, int amt)&#123;    synchronized(Account.class) &#123;      if (this.balance &gt; amt) &#123;        this.balance -= amt;        target.balance += amt;      &#125;    &#125;  &#125; &#125;\n","dateCreated":"2019-04-05T12:03:47+08:00","dateModified":"2019-04-05T13:28:14+08:00","datePublished":"2019-04-05T12:03:47+08:00","description":"摘录自 极客时间","headline":"Java并发编程学习之互斥锁","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/05/concurrent-programming-mutually-exclusive/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/05/concurrent-programming-mutually-exclusive/","keywords":"并发"}</script>
+    <meta name="description" content="摘录自 极客时间">
+<meta name="keywords" content="并发">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Java并发编程学习之互斥锁">
+<meta property="og:url" content="http://yoursite.com/2019/04/05/concurrent-programming-mutually-exclusive/index.html">
+<meta property="og:site_name" content="0GGmr0&#39;s Blog">
+<meta property="og:description" content="摘录自 极客时间">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-atomic-problems1.png">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-atomic-problems2.png">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-atomic-problems3.png">
+<meta property="og:updated_time" content="2019-04-05T05:28:14.648Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Java并发编程学习之互斥锁">
+<meta name="twitter:description" content="摘录自 极客时间">
+<meta name="twitter:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-atomic-problems1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/head.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-ljeixrezirymj7v5k3txlegl4gaqrpshsagxbusagvgz9ih8tnarxvnzgill.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
+    </div>
+    
+        
+            <a class="header-right-picture " href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/head.jpg" alt="作者的图片">
+                </a>
+                <h4 class="sidebar-profile-name">0ggmr0</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>一只弱弱的javaer</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/ " title="首页">
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/categories" title="分类">
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/tags" title="标签">
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/archives" title="归档">
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="#about" title="关于">
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">关于</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="https://github.com/0GGmr0" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Java并发编程学习之互斥锁
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-05T12:03:47+08:00">
+	
+		    4月 05, 2019
+    	
+    </time>
+    
+        <span>发布在 </span>
+        
+    <a class="category-link" href="/categories/Java/">Java</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>摘录自 <a href="https://time.geekbang.org/column/article/84344" target="_blank" rel="noopener">极客时间</a><br><a id="more"></a></p>
+<h1 id="解决原子性问题"><a href="#解决原子性问题" class="headerlink" title="解决原子性问题"></a>解决原子性问题</h1><h2 id="原子性"><a href="#原子性" class="headerlink" title="原子性"></a>原子性</h2><p>一个或者多个操作在CPU执行过程中不被中断的特性<br>例如long型变量在32位机器上读写可能会出现bug，因为long是64位的，需要两次写操作，极有可能因为<strong>线程切换</strong>的问题导致写入的变量和读出来的变量不一致。<br>一个简单暴力的解决原子性问题的方法就是禁用CPU中断（也就是禁止线程切换），但是在多核场景下显然这么干是没有用的，<strong>它只能保证CPU上线程连续执行，但是不能保证同一时刻只有一个线程执行</strong>。<br>“为了让同一时刻只有一个线程执行”，即<strong>互斥</strong>。我们可以用过加锁来实现。  </p>
+<h2 id="简易锁模型"><a href="#简易锁模型" class="headerlink" title="简易锁模型"></a>简易锁模型</h2><p>对临界区加锁即可，锁模型大概如下:<br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-atomic-problems1.png" alt="p1"><br>这里一定要注意的一点就是，一定要保证锁锁的是自己家的资源，不要去保护其他家的资源。  </p>
+<h2 id="Java锁技术-synchronized"><a href="#Java锁技术-synchronized" class="headerlink" title="Java锁技术: synchronized"></a>Java锁技术: synchronized</h2><p><code>synchronized</code>用法如下所示：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">X</span> </span>&#123;</span><br><span class="line">  <span class="comment">// 修饰非静态方法</span></span><br><span class="line">  <span class="comment">// 锁定当前实例对象的this</span></span><br><span class="line">  <span class="function"><span class="keyword">synchronized</span> <span class="keyword">void</span> <span class="title">foo</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 临界区</span></span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">// 修饰静态方法</span></span><br><span class="line">  <span class="comment">// 锁定X.class</span></span><br><span class="line">  <span class="function"><span class="keyword">synchronized</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">bar</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 临界区</span></span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">//上面这个其实相当于:</span></span><br><span class="line">  <span class="comment">//class X &#123;</span></span><br><span class="line">  <span class="comment">//    synchronized(X.class) static void bar() &#123;</span></span><br><span class="line">  <span class="comment">//    &#125;</span></span><br><span class="line">  <span class="comment">//&#125;</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">// 修饰代码块</span></span><br><span class="line">  Object obj = <span class="keyword">new</span> Object()；</span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">baz</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 锁定了obj对象</span></span><br><span class="line">    <span class="keyword">synchronized</span>(obj) &#123;</span><br><span class="line">      <span class="comment">// 临界区</span></span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>Java编译器会在<code>synchronized</code>修饰的方法或者代码块的前后自动加上加锁<code>lock()</code>和解锁<code>unlock()</code>  </p>
+<h2 id="用synchronized解决-count-1"><a href="#用synchronized解决-count-1" class="headerlink" title="用synchronized解决 count += 1"></a>用synchronized解决 count += 1</h2><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">SafeCalc</span> </span>&#123;</span><br><span class="line">  <span class="keyword">long</span> value = <span class="number">0L</span>;</span><br><span class="line">  <span class="function"><span class="keyword">synchronized</span> <span class="keyword">long</span> <span class="title">get</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> value;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="function"><span class="keyword">synchronized</span> <span class="keyword">void</span> <span class="title">addOne</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    value += <span class="number">1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>被<code>synchronized</code>修饰了的addOne()方法没有了原子性问题，有关可见性问题，<code>Happens-Before</code>管程中锁的原则说明了</p>
+<blockquote>
+<p>对一个锁的解锁 Happens-Before 于后续对这个锁的加锁。<br>所以前一个线程在临界区修改的共享变量对于后续进入临界区的线程是可见的。  </p>
+</blockquote>
+<p>上面代码转换成锁模型就是下图所示：<br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-atomic-problems2.png" alt="p2">  </p>
+<h2 id="锁和被保护资源的关系"><a href="#锁和被保护资源的关系" class="headerlink" title="锁和被保护资源的关系"></a>锁和被保护资源的关系</h2><p>受保护的资源和锁之间的关联是$N:1$的关系，即一个锁可以用来保护多个资源。<br>对上面那个例子，如果把<code>addOne()</code>方法改成静态的，此时<code>get()</code>和<code>addOne()</code>方法就出问题了<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">SafeCalc</span> </span>&#123;</span><br><span class="line">  <span class="keyword">static</span> <span class="keyword">long</span> value = <span class="number">0L</span>;</span><br><span class="line">  <span class="function"><span class="keyword">synchronized</span> <span class="keyword">long</span> <span class="title">get</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> value;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="function"><span class="keyword">synchronized</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">addOne</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    value += <span class="number">1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>改动后的代码两个锁用来保护一个资源，受保护的是<code>value</code>变量，两个锁分别是<code>this</code>和<code>SafeCalc.class</code>。可以用下图说明:<br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-atomic-problems3.png" alt="p3"><br><code>addOne()</code>对<code>value</code>的修改对<code>get()</code>没有可见性保证，所以有并发问题。</p>
+<h1 id="用一把锁保护多个资源"><a href="#用一把锁保护多个资源" class="headerlink" title="用一把锁保护多个资源"></a>用一把锁保护多个资源</h1><h2 id="保护没有关联关系的多个资源"><a href="#保护没有关联关系的多个资源" class="headerlink" title="保护没有关联关系的多个资源"></a>保护没有关联关系的多个资源</h2><p>可以使用多个锁，各自负责自己的事物，如下图代码:<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Account</span> </span>&#123;</span><br><span class="line">  <span class="comment">// 锁：保护账户余额</span></span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">final</span> Object balLock = <span class="keyword">new</span> Object();</span><br><span class="line">  <span class="comment">// 账户余额  </span></span><br><span class="line">  <span class="keyword">private</span> Integer balance;</span><br><span class="line">  <span class="comment">// 锁：保护账户密码</span></span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">final</span> Object pwLock = <span class="keyword">new</span> Object();</span><br><span class="line">  <span class="comment">// 账户密码</span></span><br><span class="line">  <span class="keyword">private</span> String password;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 取款</span></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">withdraw</span><span class="params">(Integer amt)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">synchronized</span>(balLock) &#123;</span><br><span class="line">      <span class="keyword">if</span> (<span class="keyword">this</span>.balance &gt; amt)&#123;</span><br><span class="line">        <span class="keyword">this</span>.balance -= amt;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; </span><br><span class="line">  <span class="comment">// 查看余额</span></span><br><span class="line">  <span class="function">Integer <span class="title">getBalance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">synchronized</span>(balLock) &#123;</span><br><span class="line">      <span class="keyword">return</span> balance;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 更改密码</span></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">updatePassword</span><span class="params">(String pw)</span></span>&#123;</span><br><span class="line">    <span class="keyword">synchronized</span>(pwLock) &#123;</span><br><span class="line">      <span class="keyword">this</span>.password = pw;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; </span><br><span class="line">  <span class="comment">// 查看密码</span></span><br><span class="line">  <span class="function">String <span class="title">getPassword</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">synchronized</span>(pwLock) &#123;</span><br><span class="line">      <span class="keyword">return</span> password;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>当然也可以使用this一把锁来管理账户类里面所有的资源，但是这样性能血炸。<br><strong>用不同的锁对受保护资源进行精细化管理，能提升性能</strong>，这种锁叫做<strong>细粒度锁</strong>。<br>这里要注意的一点是，不能使用<code>balance</code>这种可变变量作为互斥锁，因为它发生变化后变量就发生改变了，就没有加锁的意义了。  </p>
+<h2 id="保护有关联的多个资源"><a href="#保护有关联的多个资源" class="headerlink" title="保护有关联的多个资源"></a>保护有关联的多个资源</h2><h4 id="不正确的姿势"><a href="#不正确的姿势" class="headerlink" title="不正确的姿势"></a>不正确的姿势</h4><p>用银行账户A给账户B转账就是一个有关联的操作。<br>对下面代码:<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Account</span> </span>&#123;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> balance;</span><br><span class="line">  <span class="comment">// 转账</span></span><br><span class="line">  <span class="function"><span class="keyword">synchronized</span> <span class="keyword">void</span> <span class="title">transfer</span><span class="params">(</span></span></span><br><span class="line"><span class="function"><span class="params">      Account target, <span class="keyword">int</span> amt)</span></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">this</span>.balance &gt; amt) &#123;</span><br><span class="line">      <span class="keyword">this</span>.balance -= amt;</span><br><span class="line">      target.balance += amt;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>看似<code>synchronized</code>实现了功能，但是<code>this.balance</code>和<code>target.balance</code>不是都属于this的，<code>this</code>守护不了<code>target</code>的内容。<br>那么上面的代码执行起，假设有三个账户A、B、C，余额都是200，账户A给B转100，B给C转100，理论上最后B的余额是200。但是实际上，假设线程1执行A给B转账，锁定了<code>A.this</code>；线程2执行B给C转账，锁定了<code>B.this</code>，两个线程可以同时进入临界区<code>transfer()</code>。线程12都会读到账户B的余额是200，然后执行结束后可能的结果是100（1在2之后写）或者300（1在2之前写），但是就是不可能是200。  </p>
+<h4 id="正确的姿势"><a href="#正确的姿势" class="headerlink" title="正确的姿势"></a>正确的姿势</h4><p>一种做法是在构造函数中传入一个相同的锁变量，让资源共享。<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Account</span> </span>&#123;</span><br><span class="line">  <span class="keyword">private</span> Object lock；</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> balance;</span><br><span class="line">  <span class="function"><span class="keyword">private</span> <span class="title">Account</span><span class="params">()</span></span>;</span><br><span class="line">  <span class="comment">// 创建 Account 时传入同一个 lock 对象</span></span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="title">Account</span><span class="params">(Object lock)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">this</span>.lock = lock;</span><br><span class="line">  &#125; </span><br><span class="line">  <span class="comment">// 转账</span></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">transfer</span><span class="params">(Account target, <span class="keyword">int</span> amt)</span></span>&#123;</span><br><span class="line">    <span class="comment">// 此处检查所有对象共享的锁</span></span><br><span class="line">    <span class="keyword">synchronized</span>(lock) &#123;</span><br><span class="line">      <span class="keyword">if</span> (<span class="keyword">this</span>.balance &gt; amt) &#123;</span><br><span class="line">        <span class="keyword">this</span>.balance -= amt;</span><br><span class="line">        target.balance += amt;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line">```  </span><br><span class="line">这个方案局限性很大，实际上还有一种更简单的方式，用`Account.class`，它是java虚拟机在加载类的时候创建的，是唯一的:</span><br><span class="line">```java</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Account</span> </span>&#123;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> balance;</span><br><span class="line">  <span class="comment">// 转账</span></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">transfer</span><span class="params">(Account target, <span class="keyword">int</span> amt)</span></span>&#123;</span><br><span class="line">    <span class="keyword">synchronized</span>(Account.class) &#123;</span><br><span class="line">      <span class="keyword">if</span> (<span class="keyword">this</span>.balance &gt; amt) &#123;</span><br><span class="line">        <span class="keyword">this</span>.balance -= amt;</span><br><span class="line">        target.balance += amt;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/并发/">并发</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/04/concurrent-programming-solve-see-sort/" data-tooltip="Java并发编程学习之解决可见性和有序性" aria-label="下一篇: Java并发编程学习之解决可见性和有序性">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/05/concurrent-programming-mutually-exclusive/&amp;title=Java并发编程学习之互斥锁" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 0ggmr0. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/04/concurrent-programming-solve-see-sort/" data-tooltip="Java并发编程学习之解决可见性和有序性" aria-label="下一篇: Java并发编程学习之解决可见性和有序性">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/05/concurrent-programming-mutually-exclusive/&amp;title=Java并发编程学习之互斥锁" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/05/concurrent-programming-mutually-exclusive/&amp;title=Java并发编程学习之互斥锁">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+            <h4 id="about-card-name">0ggmr0</h4>
+        
+            <div id="about-card-bio"><p>得之坦然，失之淡然，争取必然，顺其自然</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br>
+                <p>后端工程师</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br>
+                上海
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-omrt6sh0skv3hg008jvdfajcsqqzyibzw4ehun1vxljlb2mfrl84jfkr42nm.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+</body>
+</html>
