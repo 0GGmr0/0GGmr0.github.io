@@ -1,0 +1,473 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="0GGmr0&#39;s Blog">
+    <title>Java并发编程学习(五)之用“等待-通知”机制优化循环等待 - 0GGmr0&#39;s Blog</title>
+    <meta name="author" content="0ggmr0">
+    
+    
+        <!-- <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico"> -->
+        <link rel="icon" href="/assets/images/favicon.ico">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"摘录自 极客时间   \n破坏占用且等待条件时候，如果转出账本和转入账本不满足同时在文件架上这个条件，用死循环的方式来循环等待，核心代码如下:  \n// 一次性申请转出账户和转入账户，直到成功\nwhile(!actr.apply(this, target))\n  ；\n\n如果apply()操作耗时非常短，而且并发冲突量不大时，这个方案还挺不错的，因为这种场景下，可能要循环上万次才能取到锁，比较消耗CPU。其实在这种场景下，最好的方案应该是: 如果线程要求的条件不满足，则线程阻塞自己，进入等待状态，满足再通知线程重新执行。这样可以避免CPU消耗。  \n等待-通知机制完整的等待-通知机制是线程首先获取互斥锁，当线程要求的条件不满足时，释放互斥锁，进入等待状态；当要求的条件满足时，通知等待的线程，重新获取互斥锁。  \nJava中synchronized配合wait()、notify()、notifyAll()可以实现等待-通知机制。  \nwait(): \n\n等待队列和互斥锁是一对一的关系，每个互斥锁都有自己独立的等待队列。 \n线程在进入等待队列的同时，会释放持有的互斥锁，线程释放锁以后，其他线程就有机会获得锁，并进入临界区了。要注意这里的左右两个等待队列不是一个等待队列，唤醒的时候也是从右边的队列去唤醒。  \n\nnotify()、notifyAll(): \n\n当条件满足时，会通知互斥锁的等待队列中的线程，告诉它条件曾经满足过。所谓曾经，是因为notify()只能保证在通知时间点条件满足。而线程真正开始执行的时候可能已经被别人横刀夺爱了。\n被通知的线程想要重新执行的时候，仍然需要获取到互斥锁（因为在wait的时候被释放了）。\n\nPS: wait()、notify()、notifyAll()方法操作的等待队列是互斥锁的等待队列，如果synchronized锁定的this，那么对应的一定是this.wait()、this.notify()、this.notifyAll()。如果是target，那么都是target.，而且三个方法都要提前获得互斥锁。因此，这三个方法都要在synchronized{}内部调用。如果在外部调用，或者锁定了this去调用target.，都会通知异常。  \n下面代码是一个经典写法。\nclass Allocator {\n  private List&lt;Object&gt; als;\n  // 一次性申请所有资源\n  synchronized void apply(Object from, Object to){\n    // 经典写法\n    while(als.contains(from) || als.contains(to)){\n      try{\n        wait();\n      }catch(Exception e){}   \n    } \n    als.add(from);\n    als.add(to);  \n  }\n  // 归还资源\n  synchronized void free(\n    Object from, Object to){\n    als.remove(from);\n    als.remove(to);\n    notifyAll();\n  }\n}\n\n要注意的是要尽量使用notifyAll()，notify()会随机地通知等待队列中的一个线程，但是notifyAll()会通知等待队列中的所有线程。notify()看起来比notifyAll()友好，但是notify()可能导致某些线程永远不会被通知到。  \n假设有资源A、B、C、D，线程1申请到了AB，线程2申请到了CD，此时线程3申请AB就会进入等待队列，线程4申请CD也会进入等待队列。假设线程1归还了AB，使用notify()通知，有可能被通知的是线程4，但线程4申请的是CD，所以线程4还是会继续等待，线程3就再也起不来了。  \n思考小题wait和sleep的区别  \n\nwait会释放资源，但是sleep不释放资源\nwait需要被唤醒，sleep不需要被唤醒\nwait需要获取监视器，否则抛出异常，sleep不需要\nwait是object顶级父类方法，sleep是Thread方法\n\n","dateCreated":"2019-04-05T19:57:24+08:00","dateModified":"2019-04-05T23:28:00+08:00","datePublished":"2019-04-05T19:57:24+08:00","description":"摘录自 极客时间","headline":"Java并发编程学习(五)之用“等待-通知”机制优化循环等待","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/05/concurrent-programming-notice-wait/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/05/concurrent-programming-notice-wait/","keywords":"并发"}</script>
+    <meta name="description" content="摘录自 极客时间">
+<meta name="keywords" content="并发">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Java并发编程学习(五)之用“等待-通知”机制优化循环等待">
+<meta property="og:url" content="http://yoursite.com/2019/04/05/concurrent-programming-notice-wait/index.html">
+<meta property="og:site_name" content="0GGmr0&#39;s Blog">
+<meta property="og:description" content="摘录自 极客时间">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-notice-wait1.png">
+<meta property="og:updated_time" content="2019-04-05T15:28:00.720Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Java并发编程学习(五)之用“等待-通知”机制优化循环等待">
+<meta name="twitter:description" content="摘录自 极客时间">
+<meta name="twitter:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-notice-wait1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/head.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-ljeixrezirymj7v5k3txlegl4gaqrpshsagxbusagvgz9ih8tnarxvnzgill.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
+    </div>
+    
+        
+            <a class="header-right-picture " href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/head.jpg" alt="作者的图片">
+                </a>
+                <h4 class="sidebar-profile-name">0ggmr0</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>一只弱弱的javaer</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/ " title="首页">
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/categories" title="分类">
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/tags" title="标签">
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/archives" title="归档">
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="#about" title="关于">
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">关于</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="https://github.com/0GGmr0" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Java并发编程学习(五)之用“等待-通知”机制优化循环等待
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-05T19:57:24+08:00">
+	
+		    4月 05, 2019
+    	
+    </time>
+    
+        <span>发布在 </span>
+        
+    <a class="category-link" href="/categories/Java/">Java</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>摘录自 <a href="https://time.geekbang.org/column/article/85241" target="_blank" rel="noopener">极客时间</a><br><a id="more"></a>   </p>
+<p>破坏占用且等待条件时候，如果转出账本和转入账本不满足同时在文件架上这个条件，用死循环的方式来循环等待，核心代码如下:  </p>
+<pre><code class="lang-java">// 一次性申请转出账户和转入账户，直到成功
+while(!actr.apply(this, target))
+  ；
+</code></pre>
+<p>如果apply()操作耗时非常短，而且并发冲突量不大时，这个方案还挺不错的，因为这种场景下，可能要循环上万次才能取到锁，比较消耗CPU。<br>其实在这种场景下，最好的方案应该是: 如果线程要求的条件不满足，则线程阻塞自己，进入<strong>等待</strong>状态，满足再<strong>通知</strong>线程重新执行。这样可以避免CPU消耗。  </p>
+<h2 id="等待-通知机制"><a href="#等待-通知机制" class="headerlink" title="等待-通知机制"></a>等待-通知机制</h2><p>完整的等待-通知机制是线程首先获取互斥锁，当线程要求的条件不满足时，释放互斥锁，进入等待状态；当要求的条件满足时，通知等待的线程，重新获取互斥锁。  </p>
+<p>Java中synchronized配合<code>wait()</code>、<code>notify()</code>、<code>notifyAll()</code>可以实现等待-通知机制。  </p>
+<p><code>wait()</code>: </p>
+<ul>
+<li>等待队列和互斥锁是一对一的关系，每个互斥锁都有自己独立的等待队列。 </li>
+<li>线程在进入等待队列的同时，<strong>会释放持有的互斥锁</strong>，线程释放锁以后，其他线程就有机会获得锁，并进入临界区了。<br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-notice-wait1.png" alt="p1"><br>要注意这里的左右两个等待队列<strong>不是一个等待队列</strong>，唤醒的时候也是<strong>从右边的队列去唤醒</strong>。  </li>
+</ul>
+<p><code>notify()</code>、<code>notifyAll()</code>: </p>
+<ul>
+<li>当条件满足时，会通知<strong>互斥锁的等待队列</strong>中的线程，告诉它条件<strong>曾经</strong>满足过。所谓曾经，是因为notify()只能保证在通知时间点条件满足。而线程真正开始执行的时候可能已经被别人横刀夺爱了。</li>
+<li>被通知的线程想要重新执行的时候，仍然需要获取到互斥锁（因为在wait的时候被释放了）。</li>
+</ul>
+<p>PS: <code>wait()</code>、<code>notify()</code>、<code>notifyAll()</code>方法操作的等待队列是互斥锁的等待队列，如果<code>synchronized</code>锁定的<code>this</code>，那么对应的一定是<code>this.wait()</code>、<code>this.notify()</code>、<code>this.notifyAll()</code>。如果是target，那么都是<code>target.</code>，而且三个方法都要提前获得<strong>互斥锁</strong>。因此，这三个方法都要在<br><code>synchronized{}</code>内部调用。如果在外部调用，或者锁定了<code>this</code>去调用<code>target.</code>，都会通知异常。  </p>
+<p>下面代码是一个经典写法。</p>
+<pre><code class="lang-java">class Allocator {
+  private List&lt;Object&gt; als;
+  // 一次性申请所有资源
+  synchronized void apply(Object from, Object to){
+    // 经典写法
+    while(als.contains(from) || als.contains(to)){
+      try{
+        wait();
+      }catch(Exception e){}   
+    } 
+    als.add(from);
+    als.add(to);  
+  }
+  // 归还资源
+  synchronized void free(
+    Object from, Object to){
+    als.remove(from);
+    als.remove(to);
+    notifyAll();
+  }
+}
+</code></pre>
+<p>要注意的是要尽量使用<code>notifyAll()</code>，<code>notify()</code>会随机地通知等待队列中的一个线程，但是<code>notifyAll()</code>会通知等待队列中的所有线程。<code>notify()</code>看起来比<code>notifyAll()</code>友好，但是<code>notify()</code>可能导致某些线程永远不会被通知到。  </p>
+<p>假设有资源A、B、C、D，线程1申请到了AB，线程2申请到了CD，此时线程3申请AB就会进入等待队列，线程4申请CD也会进入等待队列。<br>假设线程1归还了AB，使用<code>notify()</code>通知，有可能被通知的是线程4，但线程4申请的是CD，所以线程4还是会继续等待，线程3就再也起不来了。  </p>
+<h4 id="思考小题"><a href="#思考小题" class="headerlink" title="思考小题"></a>思考小题</h4><p><code>wait</code>和<code>sleep</code>的区别  </p>
+<ul>
+<li>wait会释放资源，但是sleep不释放资源</li>
+<li>wait需要被唤醒，sleep不需要被唤醒</li>
+<li>wait需要获取监视器，否则抛出异常，sleep不需要</li>
+<li>wait是object顶级父类方法，sleep是Thread方法</li>
+</ul>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/并发/">并发</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/05/concurrent-programming-deadlock/" data-tooltip="Java并发编程学习(四)之死锁" aria-label="下一篇: Java并发编程学习(四)之死锁">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/05/concurrent-programming-notice-wait/&amp;title=Java并发编程学习(五)之用“等待-通知”机制优化循环等待" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 0ggmr0. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/05/concurrent-programming-deadlock/" data-tooltip="Java并发编程学习(四)之死锁" aria-label="下一篇: Java并发编程学习(四)之死锁">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/05/concurrent-programming-notice-wait/&amp;title=Java并发编程学习(五)之用“等待-通知”机制优化循环等待" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/05/concurrent-programming-notice-wait/&amp;title=Java并发编程学习(五)之用“等待-通知”机制优化循环等待">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+            <h4 id="about-card-name">0ggmr0</h4>
+        
+            <div id="about-card-bio"><p>得之坦然，失之淡然，争取必然，顺其自然</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br>
+                <p>后端工程师</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br>
+                上海
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-omrt6sh0skv3hg008jvdfajcsqqzyibzw4ehun1vxljlb2mfrl84jfkr42nm.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+</body>
+</html>
