@@ -1,0 +1,479 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="0GGmr0&#39;s Blog">
+    <title>Java并发编程学习(八)之线程的生命周期 - 0GGmr0&#39;s Blog</title>
+    <meta name="author" content="0ggmr0">
+    
+    
+        <!-- <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico"> -->
+        <link rel="icon" href="/assets/images/favicon.ico">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"摘录自 极客时间\nJava生命周期如下:\n\nBLOCKED、WAITING、TIMED_WAITING可以理解为线程导致休眠状态的三种原因。\nRUNNABLE 与 BLOCKED 的状态装换在等待synchronized隐式锁的时候，等待的线程会从RUNNABLE转换到BLOCKED，得到了就会转回去。那么线程调用阻塞式API的时候，Java不会转换到BLOCKED状态，因为在操作系统层面，线程会转换到休眠，但是在JVM层面，Java线程依然保持RUNNABLE状态，因为在JVM看来，等待CPU使用权（操作系统层面是可执行状态）和等待I/O（操作系统层面是休眠状态）没有区别。所以都归入了RUNNABLE状态。  \nRUNNABLE 与 WAITING 的状态装换\n获得synchronized隐式锁的线程，调用无参数的Object.wait()\n调用无参数的Thread.joi()方法。join()是一种线程同步的方法，调用A.join()的时候，线程会进入WAITING，等thread A执行完就会回到RUNNABLE\n调用LockSupport.park()。Java并发包中的锁都是基于LockSupport实现的。调用LockSupport.park()，当前线程会阻塞，调用LockSupport.unpark(Thread thread)可以唤醒目标线程，会回到RUNNABLE\n\nRUNNABLE 与 TIMED_WAITING 的状态转换\n调用带参数的Thread.sleep(long millis) 方法\n获得synchronized隐式锁的线程，调用带超时参数的 Object.wait(long timeout) 方法\n调用带超时参数的Thread.join(long millis) 方法\n调用待超时参数的的 LockSupport.parkNanos(Object blocker, long deadline) 方法\n调用带超时参数的的 LockSupport.parkUntil(long deadline) 方法。\n\n所以TIMED_WAITING和WAITING的区别就是有没有超时参数\nNEW 到 RUNNABLE 状态Java刚创建出来的Thread对象就是NEW的状态，而创建Thread对象主要有两种方法。一种是继承Thread对象，重写run()方法。\n123456789// 自定义线程对象class MyThread extends Thread &#123;  public void run() &#123;    // 线程需要执行的代码    ......  &#125;&#125;// 创建线程对象MyThread myThread = new MyThread();\n另一种是实现RUNNALE接口，重写run()方法，将该实现类作为创建Thread对象的参数12345678910// 实现 Runnable 接口class Runner implements Runnable &#123;  @Override  public void run() &#123;    // 线程需要执行的代码    ......  &#125;&#125;// 创建线程对象Thread thread = new Thread(new Runner());\nNEW状态的线程，不会被OS调度，Java线程要执行，就要start()进入RUNNABLE状态。123MyThread myThread = new MyThread();// 从 NEW 状态转换到 RUNNABLE 状态myThread.start()；\nRUNNABLE 到TERMINATED状态线程执行完run()后，会自动转换到TERMINATED状态，强制终止run()的执行的正确姿势是调用initerrupt()方法。initerrupt()方法会通知线程，线程有机会执行后续的操作，也可以无视这个通知。  \n\n当线程A处于WAITING、TIMED_WAITING状态（是调用了类似wait()、join()、sleep()）时，其他线程调用线程A的initerrupt()方法会让A返回到RUNNABLE状态。\n当线程 A 处于 RUNNABLE 状态时，并且阻塞在 java.nio.channels.InterruptibleChannel 上时，如果其他线程调用线程 A 的 interrupt() 方法，线程 A 会触发 java.nio.channels.ClosedByInterruptException 这个异常；而阻塞在 java.nio.channels.Selector 上时，如果其他线程调用线程 A 的 interrupt() 方法，线程 A 的 java.nio.channels.Selector 会立即返回。\n\nPS:线程A可以通过isInterrupted()方法检测自己是不是被中断了。\n思考小题下面代码的本意是当前线程被中断之后，退出while(true)，那么代码是否正确  \nThread th = Thread.currentThread();\nwhile(true) {\n  if(th.isInterrupted()) {\n    break;\n  }\n  // 省略业务代码无数\n  try {\n    Thread.sleep(100);\n  }catch (InterruptedException e){\n    e.printStackTrace();\n  }\n}\n\n错误，如果代码正好在sleep，那么会接受到异常后，中断标志会自动清除，然后上面的if条件永远不会被执行\nThread th = Thread.currentThread();\nwhile(true) {\n  if(th.isInterrupted()) {\n    break;\n  }\n  // 省略业务代码无数\n  try {\n    Thread.sleep(100);\n  }catch (InterruptedException e){\n    th.interrupt();\n  }\n}\n\n","dateCreated":"2019-04-06T20:24:00+08:00","dateModified":"2019-04-06T21:26:46+08:00","datePublished":"2019-04-06T20:24:00+08:00","description":"摘录自 极客时间","headline":"Java并发编程学习(八)之线程的生命周期","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/06/concurrent-programming-life/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/06/concurrent-programming-life/","keywords":"并发"}</script>
+    <meta name="description" content="摘录自 极客时间">
+<meta name="keywords" content="并发">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Java并发编程学习(八)之线程的生命周期">
+<meta property="og:url" content="http://yoursite.com/2019/04/06/concurrent-programming-life/index.html">
+<meta property="og:site_name" content="0GGmr0&#39;s Blog">
+<meta property="og:description" content="摘录自 极客时间">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-life1.png">
+<meta property="og:updated_time" content="2019-04-06T13:26:46.052Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Java并发编程学习(八)之线程的生命周期">
+<meta name="twitter:description" content="摘录自 极客时间">
+<meta name="twitter:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-life1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/head.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-ljeixrezirymj7v5k3txlegl4gaqrpshsagxbusagvgz9ih8tnarxvnzgill.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
+    </div>
+    
+        
+            <a class="header-right-picture " href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/head.jpg" alt="作者的图片">
+                </a>
+                <h4 class="sidebar-profile-name">0ggmr0</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>一只弱弱的javaer</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/ " title="首页">
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/categories" title="分类">
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/tags" title="标签">
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/archives" title="归档">
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="#about" title="关于">
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">关于</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="https://github.com/0GGmr0" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Java并发编程学习(八)之线程的生命周期
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-06T20:24:00+08:00">
+	
+		    4月 06, 2019
+    	
+    </time>
+    
+        <span>发布在 </span>
+        
+    <a class="category-link" href="/categories/Java/">Java</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>摘录自 <a href="https://time.geekbang.org/column/article/86366" target="_blank" rel="noopener">极客时间</a><br><a id="more"></a></p>
+<p>Java生命周期如下:</p>
+<p><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-life1.png" alt="p1"></p>
+<p><code>BLOCKED</code>、<code>WAITING</code>、<code>TIMED_WAITING</code>可以理解为线程导致休眠状态的三种原因。</p>
+<h4 id="RUNNABLE-与-BLOCKED-的状态装换"><a href="#RUNNABLE-与-BLOCKED-的状态装换" class="headerlink" title="RUNNABLE 与 BLOCKED 的状态装换"></a>RUNNABLE 与 BLOCKED 的状态装换</h4><p>在等待<code>synchronized</code>隐式锁的时候，等待的线程会从<code>RUNNABLE</code>转换到<code>BLOCKED</code>，得到了就会转回去。<br>那么线程调用阻塞式API的时候，Java不会转换到<code>BLOCKED</code>状态，因为在操作系统层面，线程会转换到休眠，但是在JVM层面，Java线程依然保持<code>RUNNABLE</code>状态，因为在JVM看来，等待CPU使用权（操作系统层面是可执行状态）和等待I/O（操作系统层面是休眠状态）没有区别。所以都归入了<code>RUNNABLE</code>状态。  </p>
+<h4 id="RUNNABLE-与-WAITING-的状态装换"><a href="#RUNNABLE-与-WAITING-的状态装换" class="headerlink" title="RUNNABLE 与 WAITING 的状态装换"></a>RUNNABLE 与 WAITING 的状态装换</h4><ul>
+<li>获得<code>synchronized</code>隐式锁的线程，调用无参数的<code>Object.wait()</code></li>
+<li>调用无参数的<code>Thread.joi()</code>方法。<code>join()</code>是一种线程同步的方法，调用<code>A.join()</code>的时候，线程会进入<code>WAITING</code>，等<code>thread A</code>执行完就会回到<code>RUNNABLE</code></li>
+<li>调用<code>LockSupport.park()</code>。Java并发包中的锁都是基于<code>LockSupport</code>实现的。调用<code>LockSupport.park()</code>，当前线程会阻塞，调用<code>LockSupport.unpark(Thread thread)</code>可以唤醒目标线程，会回到<code>RUNNABLE</code></li>
+</ul>
+<h4 id="RUNNABLE-与-TIMED-WAITING-的状态转换"><a href="#RUNNABLE-与-TIMED-WAITING-的状态转换" class="headerlink" title="RUNNABLE 与 TIMED_WAITING 的状态转换"></a>RUNNABLE 与 TIMED_WAITING 的状态转换</h4><ul>
+<li>调用带参数的<code>Thread.sleep(long millis)</code> 方法</li>
+<li>获得<code>synchronized</code>隐式锁的线程，调用带超时参数的 <code>Object.wait(long timeout)</code> 方法</li>
+<li>调用带超时参数的Thread.join(long millis) 方法</li>
+<li>调用待超时参数的的 <code>LockSupport.parkNanos(Object blocker, long deadline)</code> 方法</li>
+<li>调用带超时参数的的 <code>LockSupport.parkUntil(long deadline)</code> 方法。</li>
+</ul>
+<p>所以<code>TIMED_WAITING</code>和<code>WAITING</code>的区别就是有没有超时参数</p>
+<h4 id="NEW-到-RUNNABLE-状态"><a href="#NEW-到-RUNNABLE-状态" class="headerlink" title="NEW 到 RUNNABLE 状态"></a>NEW 到 RUNNABLE 状态</h4><p>Java刚创建出来的<code>Thread</code>对象就是<code>NEW</code>的状态，而创建Thread对象主要有两种方法。一种是继承<code>Thread</code>对象，重写<code>run()</code>方法。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 自定义线程对象</span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">MyThread</span> <span class="keyword">extends</span> <span class="title">Thread</span> </span>&#123;</span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 线程需要执行的代码</span></span><br><span class="line">    ......</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// 创建线程对象</span></span><br><span class="line">MyThread myThread = <span class="keyword">new</span> MyThread();</span><br></pre></td></tr></table></figure>
+<p>另一种是实现<code>RUNNALE</code>接口，重写<code>run()</code>方法，将该实现类作为创建Thread对象的参数<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 实现 Runnable 接口</span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Runner</span> <span class="keyword">implements</span> <span class="title">Runnable</span> </span>&#123;</span><br><span class="line">  <span class="meta">@Override</span></span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 线程需要执行的代码</span></span><br><span class="line">    ......</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// 创建线程对象</span></span><br><span class="line">Thread thread = <span class="keyword">new</span> Thread(<span class="keyword">new</span> Runner());</span><br></pre></td></tr></table></figure></p>
+<p><code>NEW</code>状态的线程，不会被OS调度，Java线程要执行，就要<code>start()</code>进入<code>RUNNABLE</code>状态。<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">MyThread myThread = <span class="keyword">new</span> MyThread();</span><br><span class="line"><span class="comment">// 从 NEW 状态转换到 RUNNABLE 状态</span></span><br><span class="line">myThread.start()；</span><br></pre></td></tr></table></figure></p>
+<h4 id="RUNNABLE-到TERMINATED状态"><a href="#RUNNABLE-到TERMINATED状态" class="headerlink" title="RUNNABLE 到TERMINATED状态"></a>RUNNABLE 到TERMINATED状态</h4><p>线程执行完<code>run()</code>后，会自动转换到<code>TERMINATED</code>状态，强制终止<code>run()</code>的执行的正确姿势是调用<code>initerrupt()</code>方法。<br><code>initerrupt()</code>方法会通知线程，线程有机会执行后续的操作，也可以无视这个通知。  </p>
+<ul>
+<li>当线程A处于<code>WAITING</code>、<code>TIMED_WAITING</code>状态（是调用了类似<code>wait()</code>、<code>join()</code>、<code>sleep()</code>）时，其他线程调用线程A的<code>initerrupt()</code>方法会让A返回到<code>RUNNABLE</code>状态。</li>
+<li>当线程 A 处于 <code>RUNNABLE</code> 状态时，并且阻塞在 <code>java.nio.channels.InterruptibleChannel</code> 上时，如果其他线程调用线程 A 的 <code>interrupt()</code> 方法，线程 A 会触发 <code>java.nio.channels.ClosedByInterruptException</code> 这个异常；而阻塞在 <code>java.nio.channels.Selector</code> 上时，如果其他线程调用线程 A 的 <code>interrupt()</code> 方法，线程 A 的 <code>java.nio.channels.Selector</code> 会立即返回。</li>
+</ul>
+<p>PS:线程A可以通过<code>isInterrupted()</code>方法检测自己是不是被中断了。</p>
+<h4 id="思考小题"><a href="#思考小题" class="headerlink" title="思考小题"></a>思考小题</h4><p>下面代码的本意是当前线程被中断之后，退出<code>while(true)</code>，那么代码是否正确  </p>
+<pre><code class="lang-java">Thread th = Thread.currentThread();
+while(true) {
+  if(th.isInterrupted()) {
+    break;
+  }
+  // 省略业务代码无数
+  try {
+    Thread.sleep(100);
+  }catch (InterruptedException e){
+    e.printStackTrace();
+  }
+}
+</code></pre>
+<p>错误，如果代码正好在<code>sleep</code>，那么会接受到异常后，中断标志会自动清除，然后上面的if条件永远不会被执行</p>
+<pre><code class="lang-java">Thread th = Thread.currentThread();
+while(true) {
+  if(th.isInterrupted()) {
+    break;
+  }
+  // 省略业务代码无数
+  try {
+    Thread.sleep(100);
+  }catch (InterruptedException e){
+    th.interrupt();
+  }
+}
+</code></pre>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/并发/">并发</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-thread-nums/" data-tooltip="Java并发编程学习(九)线程数量和局部变量" aria-label="上一篇: Java并发编程学习(九)线程数量和局部变量">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-tube-process/" data-tooltip="Java并发编程学习(七)之管程" aria-label="下一篇: Java并发编程学习(七)之管程">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-life/&amp;title=Java并发编程学习(八)之线程的生命周期" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 0ggmr0. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-thread-nums/" data-tooltip="Java并发编程学习(九)线程数量和局部变量" aria-label="上一篇: Java并发编程学习(九)线程数量和局部变量">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-tube-process/" data-tooltip="Java并发编程学习(七)之管程" aria-label="下一篇: Java并发编程学习(七)之管程">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-life/&amp;title=Java并发编程学习(八)之线程的生命周期" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-life/&amp;title=Java并发编程学习(八)之线程的生命周期">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+            <h4 id="about-card-name">0ggmr0</h4>
+        
+            <div id="about-card-bio"><p>得之坦然，失之淡然，争取必然，顺其自然</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br>
+                <p>后端工程师</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br>
+                上海
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-omrt6sh0skv3hg008jvdfajcsqqzyibzw4ehun1vxljlb2mfrl84jfkr42nm.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+</body>
+</html>

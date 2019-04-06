@@ -1,0 +1,464 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="0GGmr0&#39;s Blog">
+    <title>Java并发编程学习(七)之管程 - 0GGmr0&#39;s Blog</title>
+    <meta name="author" content="0ggmr0">
+    
+    
+        <!-- <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico"> -->
+        <link rel="icon" href="/assets/images/favicon.ico">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"摘录自 极客时间\n管程介绍Java采用了管程(Monitor)技术，synchronized关键字以及wait()、notify()、notifyAll()都是管程的组成部分。  \n管程解决互斥问题就是将共享变量以及对共享变量的操作统一封装起来。管程中引入了条件变量的概念，每一个条件变量都对应了一个等待队列。条件变量和等待队列的作用就是为了解决线程同步的问题。  \n下图为MESA模型\n\n如图所示，如果线程从条件变量等待队列出来，那么它会回到入口等待队列中。  \n下面是一段样例代码12345678910111213141516171819202122232425262728293031323334353637383940414243444546public class BlockedQueue&lt;T&gt;&#123;  final Lock lock =    new ReentrantLock();  // 条件变量：队列不满    final Condition notFull =    lock.newCondition();  // 条件变量：队列不空    final Condition notEmpty =    lock.newCondition();  // 入队  void enq(T x) &#123;    lock.lock();    try &#123;      // 一定要用while，使用if的话会出问题，      // 因为java mesa模型线程被唤醒后是回到入口等待队列去竞争的，      // 可能拿到锁以后又不满足条件了，所以必须使用while      while (队列已满)&#123;        // 等待队列不满         // await和wait()语义相同        notFull.await();      &#125;        // 省略入队操作...      // 入队后, 通知可出队      // signal()和notify()语义相同      notEmpty.signal();    &#125;finally &#123;      lock.unlock();    &#125;  &#125;  // 出队  void deq()&#123;    lock.lock();    try &#123;      while (队列已空)&#123;        // 等待队列不空        notEmpty.await();      &#125;      // 省略出队操作...      // 出队后，通知可入队      notFull.signal();    &#125;finally &#123;      lock.unlock();    &#125;    &#125;&#125;\n这里要注意的是线程等待和通知需要调用 await()、signal()、signalAll()，语义和wait()、notify()、notifyAll()相同。\nwait正确姿势123while(条件不满足) &#123;    wait();&#125;\nnotify()和notifyAll()尽量使用notify()，除非\n\n所有等待线程拥有相同的等待条件\n所有等待线程被唤醒后，执行相同的操作\n只需要唤醒一个线程\n\nPS: Java内置的管程(synchronized)对MESA模型进行了精简。Java语言内置的管程中只有一个条件变量。\n并发包中的管程并发编程的两大问题：互斥、同步。有了synchronized还要存在Lock的原因是synchronized申请资源失败会进入阻塞，也不会释放线程已经占有的资源。不能实现破坏不可抢占条件。重新设计一把互斥锁来解决这个问题，有三种方案：\n\n能够响应中断\n支持超时\n非阻塞地获取锁  \n\n这三个方案是“重复造轮子”的原因，刚好对应了Lock接口的三个方法。12345678// 支持中断的 APIvoid lockInterruptibly()   throws InterruptedException;// 支持超时的 APIboolean tryLock(long time, TimeUnit unit) throws InterruptedException;// 支持非阻塞获取锁的 APIboolean tryLock();\n保证可见性1234567891011121314class X &#123;  private final Lock rtl = new ReentrantLock();  int value;  public void addOne() &#123;    // 获取锁    rtl.lock();      try &#123;      value+=1;    &#125; finally &#123;      // 保证锁能释放      rtl.unlock();    &#125;  &#125;&#125;\n可见性的保证来自于volatile相关的Happens-Before规则。Java SDK 里面的ReentrantLock内部有一个volatile的成员变量state，获取锁的时候回写它的值，解锁的时候也会写它的值。根据下面这三条规则:  \n\n顺序性规则:对于线程 T1，value+=1 Happens-Before 释放锁的操作 unlock()\nvolatile变量规则:由于 state = 1 会先读取 state，所以线程 T1 的 unlock() 操作 Happens-Before 线程 T2 的 lock() 操作；\n传递性规则:线程 T1 的 value+=1 Happens-Before 线程 T2 的 lock() 操作。12345678910111213class SampleLock &#123;  volatile int state;  // 加锁  lock() &#123;    // 省略代码无数    state = 1;  &#125;  // 解锁  unlock() &#123;    // 省略代码无数    state = 0;  &#125;&#125;\n\n\n公平锁和费公平锁fail123456789// 无参构造函数：默认非公平锁public ReentrantLock() &#123;    sync = new NonfairSync();&#125;// 根据公平策略参数创建锁public ReentrantLock(boolean fair)&#123;    sync = fair ? new FairSync()                 : new NonfairSync();&#125;\n入口等待队列的锁都对应着一个等待队列，如果一个线程没有获得锁，就会进入等待队列，当有线程释放锁的时候，就需要从等待队列中唤醒一个等待的线程。如果是公平锁，唤醒的策略就是谁等待的时间长，就唤醒谁，很公平；如果是非公平锁，则不提供这个公平保证，有可能等待时间短的线程反而先被唤醒。\n用锁的最佳实践\n永远只在更新对象的成员变量时加锁\n永远只在访问可变的成员变量时加锁\n永远不在调用其他对象的方法时加锁\n\n思考小题tryLock() 支持非阻塞方式获取锁，下面这段关于转账的程序就使用到了 tryLock()。它是否存在死锁问题呢？\n123456789101112131415161718192021222324class Account &#123;  private int balance;  private final Lock lock          = new ReentrantLock();  // 转账  void transfer(Account tar, int amt)&#123;    while (true) &#123;      if(this.lock.tryLock()) &#123;        try &#123;          if (tar.lock.tryLock()) &#123;            try &#123;              this.balance -= amt;              tar.balance += amt;            &#125; finally &#123;              tar.lock.unlock();            &#125;          &#125;//if        &#125; finally &#123;          this.lock.unlock();        &#125;      &#125;//if    &#125;//while  &#125;//transfer&#125;\n存在活锁，A转B，B转A就血G。\n","dateCreated":"2019-04-06T20:00:39+08:00","dateModified":"2019-04-06T22:35:37+08:00","datePublished":"2019-04-06T20:00:39+08:00","description":"摘录自 极客时间","headline":"Java并发编程学习(七)之管程","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/06/concurrent-programming-tube-process/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/06/concurrent-programming-tube-process/","keywords":"并发"}</script>
+    <meta name="description" content="摘录自 极客时间">
+<meta name="keywords" content="并发">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Java并发编程学习(七)之管程">
+<meta property="og:url" content="http://yoursite.com/2019/04/06/concurrent-programming-tube-process/index.html">
+<meta property="og:site_name" content="0GGmr0&#39;s Blog">
+<meta property="og:description" content="摘录自 极客时间">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-tube-process1.png">
+<meta property="og:updated_time" content="2019-04-06T14:35:37.468Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Java并发编程学习(七)之管程">
+<meta name="twitter:description" content="摘录自 极客时间">
+<meta name="twitter:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-tube-process1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/head.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-ljeixrezirymj7v5k3txlegl4gaqrpshsagxbusagvgz9ih8tnarxvnzgill.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
+    </div>
+    
+        
+            <a class="header-right-picture " href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/head.jpg" alt="作者的图片">
+                </a>
+                <h4 class="sidebar-profile-name">0ggmr0</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>一只弱弱的javaer</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/ " title="首页">
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/categories" title="分类">
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/tags" title="标签">
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/archives" title="归档">
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="#about" title="关于">
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">关于</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="https://github.com/0GGmr0" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Java并发编程学习(七)之管程
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-06T20:00:39+08:00">
+	
+		    4月 06, 2019
+    	
+    </time>
+    
+        <span>发布在 </span>
+        
+    <a class="category-link" href="/categories/Java/">Java</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>摘录自 <a href="https://time.geekbang.org/column/article/84017" target="_blank" rel="noopener">极客时间</a><br><a id="more"></a></p>
+<h2 id="管程介绍"><a href="#管程介绍" class="headerlink" title="管程介绍"></a>管程介绍</h2><p>Java采用了管程(Monitor)技术，<code>synchronized</code>关键字以及<code>wait()</code>、<code>notify()</code>、<code>notifyAll()</code>都是管程的组成部分。  </p>
+<p>管程解决互斥问题就是将共享变量以及对共享变量的操作统一封装起来。<br>管程中引入了条件变量的概念，每一个条件变量都对应了一个等待队列。条件变量和等待队列的作用就是为了解决线程同步的问题。  </p>
+<p>下图为MESA模型</p>
+<p><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-tube-process1.png" alt="p1"></p>
+<p>如图所示，如果线程从条件变量等待队列出来，那么它会回到入口等待队列中。  </p>
+<p>下面是一段样例代码<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">BlockedQueue</span>&lt;<span class="title">T</span>&gt;</span>&#123;</span><br><span class="line">  <span class="keyword">final</span> Lock lock =</span><br><span class="line">    <span class="keyword">new</span> ReentrantLock();</span><br><span class="line">  <span class="comment">// 条件变量：队列不满  </span></span><br><span class="line">  <span class="keyword">final</span> Condition notFull =</span><br><span class="line">    lock.newCondition();</span><br><span class="line">  <span class="comment">// 条件变量：队列不空  </span></span><br><span class="line">  <span class="keyword">final</span> Condition notEmpty =</span><br><span class="line">    lock.newCondition();</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 入队</span></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">enq</span><span class="params">(T x)</span> </span>&#123;</span><br><span class="line">    lock.lock();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">      <span class="comment">// 一定要用while，使用if的话会出问题，</span></span><br><span class="line">      <span class="comment">// 因为java mesa模型线程被唤醒后是回到入口等待队列去竞争的，</span></span><br><span class="line">      <span class="comment">// 可能拿到锁以后又不满足条件了，所以必须使用while</span></span><br><span class="line">      <span class="keyword">while</span> (队列已满)&#123;</span><br><span class="line">        <span class="comment">// 等待队列不满 </span></span><br><span class="line">        <span class="comment">// await和wait()语义相同</span></span><br><span class="line">        notFull.await();</span><br><span class="line">      &#125;  </span><br><span class="line">      <span class="comment">// 省略入队操作...</span></span><br><span class="line">      <span class="comment">// 入队后, 通知可出队</span></span><br><span class="line">      <span class="comment">// signal()和notify()语义相同</span></span><br><span class="line">      notEmpty.signal();</span><br><span class="line">    &#125;<span class="keyword">finally</span> &#123;</span><br><span class="line">      lock.unlock();</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">// 出队</span></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">deq</span><span class="params">()</span></span>&#123;</span><br><span class="line">    lock.lock();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">      <span class="keyword">while</span> (队列已空)&#123;</span><br><span class="line">        <span class="comment">// 等待队列不空</span></span><br><span class="line">        notEmpty.await();</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="comment">// 省略出队操作...</span></span><br><span class="line">      <span class="comment">// 出队后，通知可入队</span></span><br><span class="line">      notFull.signal();</span><br><span class="line">    &#125;<span class="keyword">finally</span> &#123;</span><br><span class="line">      lock.unlock();</span><br><span class="line">    &#125;  </span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>这里要注意的是线程等待和通知需要调用 <code>await()</code>、<code>signal()</code>、<code>signalAll()</code>，语义和<code>wait()</code>、<code>notify()</code>、<code>notifyAll()</code>相同。</p>
+<p>wait正确姿势<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">while</span>(条件不满足) &#123;</span><br><span class="line">    wait();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h4 id="notify-和notifyAll"><a href="#notify-和notifyAll" class="headerlink" title="notify()和notifyAll()"></a>notify()和notifyAll()</h4><p>尽量使用notify()，除非</p>
+<ul>
+<li>所有等待线程拥有相同的等待条件</li>
+<li>所有等待线程被唤醒后，执行相同的操作</li>
+<li>只需要唤醒一个线程</li>
+</ul>
+<p>PS: Java内置的管程(synchronized)对MESA模型进行了精简。Java语言内置的管程中只有一个条件变量。</p>
+<h2 id="并发包中的管程"><a href="#并发包中的管程" class="headerlink" title="并发包中的管程"></a>并发包中的管程</h2><p>并发编程的两大问题：互斥、同步。<br>有了<code>synchronized</code>还要存在<code>Lock</code>的原因是<code>synchronized</code>申请资源失败会进入阻塞，也不会释放线程已经占有的资源。不能实现<strong>破坏不可抢占条件</strong>。<br>重新设计一把互斥锁来解决这个问题，有三种方案：</p>
+<ul>
+<li>能够响应中断</li>
+<li>支持超时</li>
+<li>非阻塞地获取锁  </li>
+</ul>
+<p>这三个方案是“重复造轮子”的原因，刚好对应了Lock接口的三个方法。<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 支持中断的 API</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">lockInterruptibly</span><span class="params">()</span> </span></span><br><span class="line"><span class="function">  <span class="keyword">throws</span> InterruptedException</span>;</span><br><span class="line"><span class="comment">// 支持超时的 API</span></span><br><span class="line"><span class="function"><span class="keyword">boolean</span> <span class="title">tryLock</span><span class="params">(<span class="keyword">long</span> time, TimeUnit unit)</span> </span></span><br><span class="line"><span class="function"><span class="keyword">throws</span> InterruptedException</span>;</span><br><span class="line"><span class="comment">// 支持非阻塞获取锁的 API</span></span><br><span class="line"><span class="function"><span class="keyword">boolean</span> <span class="title">tryLock</span><span class="params">()</span></span>;</span><br></pre></td></tr></table></figure></p>
+<h4 id="保证可见性"><a href="#保证可见性" class="headerlink" title="保证可见性"></a>保证可见性</h4><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">X</span> </span>&#123;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">final</span> Lock rtl = <span class="keyword">new</span> ReentrantLock();</span><br><span class="line">  <span class="keyword">int</span> value;</span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">addOne</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// 获取锁</span></span><br><span class="line">    rtl.lock();  </span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">      value+=<span class="number">1</span>;</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">      <span class="comment">// 保证锁能释放</span></span><br><span class="line">      rtl.unlock();</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>可见性的保证来自于<code>volatile</code>相关的<code>Happens-Before</code>规则。Java SDK 里面的<code>ReentrantLock</code>内部有一个<code>volatile</code>的成员变量<code>state</code>，获取锁的时候回写它的值，解锁的时候也会写它的值。<br>根据下面这三条规则:  </p>
+<ul>
+<li>顺序性规则:对于线程 T1，<code>value+=1</code> <code>Happens-Before</code> 释放锁的操作 <code>unlock()</code></li>
+<li>volatile变量规则:由于 <code>state = 1</code> 会先读取 <code>state</code>，所以线程 T1 的 <code>unlock()</code> 操作 <code>Happens-Before</code> 线程 T2 的 <code>lock()</code> 操作；</li>
+<li>传递性规则:线程 T1 的 <code>value+=1</code> <code>Happens-Before</code> 线程 T2 的 <code>lock()</code> 操作。<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">SampleLock</span> </span>&#123;</span><br><span class="line">  <span class="keyword">volatile</span> <span class="keyword">int</span> state;</span><br><span class="line">  <span class="comment">// 加锁</span></span><br><span class="line">  lock() &#123;</span><br><span class="line">    <span class="comment">// 省略代码无数</span></span><br><span class="line">    state = <span class="number">1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">// 解锁</span></span><br><span class="line">  unlock() &#123;</span><br><span class="line">    <span class="comment">// 省略代码无数</span></span><br><span class="line">    state = <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<h4 id="公平锁和费公平锁"><a href="#公平锁和费公平锁" class="headerlink" title="公平锁和费公平锁"></a>公平锁和费公平锁</h4><p>fail<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 无参构造函数：默认非公平锁</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">ReentrantLock</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    sync = <span class="keyword">new</span> NonfairSync();</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// 根据公平策略参数创建锁</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">ReentrantLock</span><span class="params">(<span class="keyword">boolean</span> fair)</span></span>&#123;</span><br><span class="line">    sync = fair ? <span class="keyword">new</span> FairSync() </span><br><span class="line">                : <span class="keyword">new</span> NonfairSync();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>入口等待队列的锁都对应着一个等待队列，如果一个线程没有获得锁，就会进入等待队列，当有线程释放锁的时候，就需要从等待队列中唤醒一个等待的线程。如果是公平锁，唤醒的策略就是谁等待的时间长，就唤醒谁，很公平；如果是非公平锁，则不提供这个公平保证，有可能等待时间短的线程反而先被唤醒。</p>
+<h4 id="用锁的最佳实践"><a href="#用锁的最佳实践" class="headerlink" title="用锁的最佳实践"></a>用锁的最佳实践</h4><ul>
+<li>永远只在更新对象的成员变量时加锁</li>
+<li>永远只在访问可变的成员变量时加锁</li>
+<li>永远不在调用其他对象的方法时加锁</li>
+</ul>
+<h4 id="思考小题"><a href="#思考小题" class="headerlink" title="思考小题"></a>思考小题</h4><p><code>tryLock()</code> 支持非阻塞方式获取锁，下面这段关于转账的程序就使用到了 <code>tryLock()</code>。它是否存在死锁问题呢？</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Account</span> </span>&#123;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> balance;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">final</span> Lock lock</span><br><span class="line">          = <span class="keyword">new</span> ReentrantLock();</span><br><span class="line">  <span class="comment">// 转账</span></span><br><span class="line">  <span class="function"><span class="keyword">void</span> <span class="title">transfer</span><span class="params">(Account tar, <span class="keyword">int</span> amt)</span></span>&#123;</span><br><span class="line">    <span class="keyword">while</span> (<span class="keyword">true</span>) &#123;</span><br><span class="line">      <span class="keyword">if</span>(<span class="keyword">this</span>.lock.tryLock()) &#123;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">          <span class="keyword">if</span> (tar.lock.tryLock()) &#123;</span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">              <span class="keyword">this</span>.balance -= amt;</span><br><span class="line">              tar.balance += amt;</span><br><span class="line">            &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">              tar.lock.unlock();</span><br><span class="line">            &#125;</span><br><span class="line">          &#125;<span class="comment">//if</span></span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">          <span class="keyword">this</span>.lock.unlock();</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;<span class="comment">//if</span></span><br><span class="line">    &#125;<span class="comment">//while</span></span><br><span class="line">  &#125;<span class="comment">//transfer</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>存在活锁，A转B，B转A就血G。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/并发/">并发</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-life/" data-tooltip="Java并发编程学习(八)之线程的生命周期" aria-label="上一篇: Java并发编程学习(八)之线程的生命周期">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/05/concurrent-programming-safe-activity-ability/" data-tooltip="Java并发编程学习(六)之安全性、活跃性和性能问题" aria-label="下一篇: Java并发编程学习(六)之安全性、活跃性和性能问题">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-tube-process/&amp;title=Java并发编程学习(七)之管程" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 0ggmr0. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-life/" data-tooltip="Java并发编程学习(八)之线程的生命周期" aria-label="上一篇: Java并发编程学习(八)之线程的生命周期">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/05/concurrent-programming-safe-activity-ability/" data-tooltip="Java并发编程学习(六)之安全性、活跃性和性能问题" aria-label="下一篇: Java并发编程学习(六)之安全性、活跃性和性能问题">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-tube-process/&amp;title=Java并发编程学习(七)之管程" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-tube-process/&amp;title=Java并发编程学习(七)之管程">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+            <h4 id="about-card-name">0ggmr0</h4>
+        
+            <div id="about-card-bio"><p>得之坦然，失之淡然，争取必然，顺其自然</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br>
+                <p>后端工程师</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br>
+                上海
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-omrt6sh0skv3hg008jvdfajcsqqzyibzw4ehun1vxljlb2mfrl84jfkr42nm.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+</body>
+</html>

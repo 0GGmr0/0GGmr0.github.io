@@ -1,0 +1,433 @@
+
+<!DOCTYPE html>
+<html lang="zh-cn">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="0GGmr0&#39;s Blog">
+    <title>Java并发编程学习(九)线程数量和局部变量 - 0GGmr0&#39;s Blog</title>
+    <meta name="author" content="0ggmr0">
+    
+    
+        <!-- <link rel="icon" href="http://yoursite.com/assets/images/favicon.ico"> -->
+        <link rel="icon" href="/assets/images/favicon.ico">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"摘录自 极客时间\n合适的线程数量对于CPU密集型计算场景，“线程的数量=CPU核数”就是最合适的。但是工程上一般会设置成“CPU核数+1”。\n对于I/O密集型计算场景，最佳的线程数为\n\n最佳线程数=1 + \\frac{I/O耗时}{CPU耗时}上面这个单核CPU，但是对于多核CPU，只要扩大比例即可：\n\n最佳线程数=CPU核数*[1 + \\frac{I/O耗时}{CPU耗时}]局部变量是线程安全的对下面的代码，当多个线程调用fibonacci()这个方法的时候，数组r是否存在数据竞争？123456789101112// 返回斐波那契数列int[] fibonacci(int n) &#123;  // 创建结果数组  int[] r = new int[n];  // 初始化第一、第二个数  r[0] = r[1] = 1;  // ①  // 计算 2..n  for(int i = 2; i &lt; n; i++) &#123;      r[i] = r[i-2] + r[i-1];  &#125;  return r;&#125;\n当然不会，因为局部变量是线程安全的。原因如下图所示：\n线程封闭局部变量不会与其他线程共享，所以出现了线程封闭的技术。从数据库连接池里面获取的连接Connection保证一个Connection一旦被一个线程获取之后，这个线程关闭Connection之前这段时间不会再分配给其他线程，从而保证了没有并发问题。  \n","dateCreated":"2019-04-06T20:58:10+08:00","dateModified":"2019-04-06T21:26:46+08:00","datePublished":"2019-04-06T20:58:10+08:00","description":"摘录自 极客时间","headline":"Java并发编程学习(九)线程数量和局部变量","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/06/concurrent-programming-thread-nums/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/06/concurrent-programming-thread-nums/","keywords":"并发"}</script>
+    <meta name="description" content="摘录自 极客时间">
+<meta name="keywords" content="并发">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Java并发编程学习(九)线程数量和局部变量">
+<meta property="og:url" content="http://yoursite.com/2019/04/06/concurrent-programming-thread-nums/index.html">
+<meta property="og:site_name" content="0GGmr0&#39;s Blog">
+<meta property="og:description" content="摘录自 极客时间">
+<meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-thread-nums1.png">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-thread-nums2.png">
+<meta property="og:updated_time" content="2019-04-06T13:26:46.051Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Java并发编程学习(九)线程数量和局部变量">
+<meta name="twitter:description" content="摘录自 极客时间">
+<meta name="twitter:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-thread-nums1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://yoursite.com/assets/images/head.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-ljeixrezirymj7v5k3txlegl4gaqrpshsagxbusagvgz9ih8tnarxvnzgill.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
+    </div>
+    
+        
+            <a class="header-right-picture " href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/head.jpg" alt="作者的图片">
+                </a>
+                <h4 class="sidebar-profile-name">0ggmr0</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>一只弱弱的javaer</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/ " title="首页">
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">首页</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/categories" title="分类">
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">分类</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/tags" title="标签">
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">标签</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="/archives" title="归档">
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">归档</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="#about" title="关于">
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">关于</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a class="sidebar-button-link " href="https://github.com/0GGmr0" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Java并发编程学习(九)线程数量和局部变量
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-06T20:58:10+08:00">
+	
+		    4月 06, 2019
+    	
+    </time>
+    
+        <span>发布在 </span>
+        
+    <a class="category-link" href="/categories/Java/">Java</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>摘录自 <a href="https://time.geekbang.org/column/article/86666" target="_blank" rel="noopener">极客时间</a><br><a id="more"></a></p>
+<h2 id="合适的线程数量"><a href="#合适的线程数量" class="headerlink" title="合适的线程数量"></a>合适的线程数量</h2><p>对于CPU密集型计算场景，“线程的数量=CPU核数”就是最合适的。但是工程上一般会设置成“CPU核数+1”。</p>
+<p>对于I/O密集型计算场景，最佳的线程数为</p>
+<script type="math/tex; mode=display">
+最佳线程数=1 + \frac{I/O耗时}{CPU耗时}</script><p>上面这个单核CPU，但是对于多核CPU，只要扩大比例即可：</p>
+<script type="math/tex; mode=display">
+最佳线程数=CPU核数*[1 + \frac{I/O耗时}{CPU耗时}]</script><h2 id="局部变量是线程安全的"><a href="#局部变量是线程安全的" class="headerlink" title="局部变量是线程安全的"></a>局部变量是线程安全的</h2><p>对下面的代码，当多个线程调用<code>fibonacci()</code>这个方法的时候，数组r是否存在数据竞争？<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 返回斐波那契数列</span></span><br><span class="line"><span class="keyword">int</span>[] fibonacci(<span class="keyword">int</span> n) &#123;</span><br><span class="line">  <span class="comment">// 创建结果数组</span></span><br><span class="line">  <span class="keyword">int</span>[] r = <span class="keyword">new</span> <span class="keyword">int</span>[n];</span><br><span class="line">  <span class="comment">// 初始化第一、第二个数</span></span><br><span class="line">  r[<span class="number">0</span>] = r[<span class="number">1</span>] = <span class="number">1</span>;  <span class="comment">// ①</span></span><br><span class="line">  <span class="comment">// 计算 2..n</span></span><br><span class="line">  <span class="keyword">for</span>(<span class="keyword">int</span> i = <span class="number">2</span>; i &lt; n; i++) &#123;</span><br><span class="line">      r[i] = r[i-<span class="number">2</span>] + r[i-<span class="number">1</span>];</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> r;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>当然不会，因为<strong>局部变量是线程安全</strong>的。<br>原因如下图所示：<br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-thread-nums1.png" alt="p1"><br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-thread-nums2.png" alt="p2"></p>
+<h4 id="线程封闭"><a href="#线程封闭" class="headerlink" title="线程封闭"></a>线程封闭</h4><p>局部变量不会与其他线程共享，所以出现了线程封闭的技术。<br>从数据库连接池里面获取的连接Connection保证一个Connection一旦被一个线程获取之后，这个线程关闭Connection之前这段时间不会再分配给其他线程，从而保证了没有并发问题。  </p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/并发/">并发</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-current-limiter/" data-tooltip="Java并发编程学习(十)之实现限流器" aria-label="上一篇: Java并发编程学习(十)之实现限流器">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-life/" data-tooltip="Java并发编程学习(八)之线程的生命周期" aria-label="下一篇: Java并发编程学习(八)之线程的生命周期">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-thread-nums/&amp;title=Java并发编程学习(九)线程数量和局部变量" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 0ggmr0. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-current-limiter/" data-tooltip="Java并发编程学习(十)之实现限流器" aria-label="上一篇: Java并发编程学习(十)之实现限流器">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-life/" data-tooltip="Java并发编程学习(八)之线程的生命周期" aria-label="下一篇: Java并发编程学习(八)之线程的生命周期">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-thread-nums/&amp;title=Java并发编程学习(九)线程数量和局部变量" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-thread-nums/&amp;title=Java并发编程学习(九)线程数量和局部变量">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/head.jpg" alt="作者的图片">
+        
+            <h4 id="about-card-name">0ggmr0</h4>
+        
+            <div id="about-card-bio"><p>得之坦然，失之淡然，争取必然，顺其自然</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br>
+                <p>后端工程师</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br>
+                上海
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-omrt6sh0skv3hg008jvdfajcsqqzyibzw4ehun1vxljlb2mfrl84jfkr42nm.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="generator" content="0GGmr0&#39;s Blog">
-    <title>归档: 2019/4 - 0GGmr0&#39;s Blog</title>
+    <title>Java并发编程学习(十)之实现限流器 - 0GGmr0&#39;s Blog</title>
     <meta name="author" content="0ggmr0">
     
     
@@ -14,17 +14,21 @@
         <link rel="icon" href="/assets/images/favicon.ico">
     
     
-    <script type="application/ld+json">{}</script>
-    <meta name="description" content="得之坦然，失之淡然，争取必然，顺其自然">
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg"},"articleBody":"信号量模型模型图如下所示:\n\ninit():设置计数器的初始值\ndown():计数器的值-1，如果此时计数器的值小于0（没资源了），则当前线程被阻塞，否则继续进行\nup():计数器的值+1，如果此时计数器的值小于或者等于0（大于0说明没有被阻塞的线程，因为资源够用），那么唤醒等待队列中的一个线程，并且将它从等待队列中移除。  \n\n这三个方法都是原子性的。下面代码为一个简单的信号量模型:12345678910111213141516171819202122232425class Semaphore&#123;  // 计数器  int count;  // 等待队列  Queue queue;  // 初始化操作  Semaphore(int c)&#123;    this.count=c;  &#125;  //   void down()&#123;    this.count--;    if(this.count&lt;0)&#123;      // 将当前线程插入等待队列      // 阻塞当前线程    &#125;  &#125;  void up()&#123;    this.count++;    if(this.count&lt;=0) &#123;      // 移除等待队列中的某个线程 T      // 唤醒线程 T    &#125;  &#125;&#125;\n在java SDK中down()和up()对应acquire()和release()。  \n使用信号量实现简单的互斥:12345678910111213static int count;// 初始化信号量static final Semaphore s     = new Semaphore(1);// 用信号量保证互斥    static void addOne() &#123;  s.acquire();  try &#123;    count+=1;  &#125; finally &#123;    s.release();  &#125;&#125;\n假设两个线程 T1 和 T2 同时访问 addOne() 方法，当它们同时调用 acquire() 的时候，由于 acquire() 是一个原子操作，所以只能有一个线程（假设 T1）把信号量里的计数器减为 0，另外一个线程（T2）则是将计数器减为 -1。对于线程 T1，信号量里面的计数器的值是 0，大于等于 0，所以线程 T1 会继续执行；对于线程 T2，信号量里面的计数器的值是 -1，小于 0，按照信号量模型里对 down() 操作的描述，线程 T2 将被阻塞。所以此时只有线程 T1 会进入临界区执行count += 1。当线程 T1 执行 release() 操作，也就是 up() 操作的时候，信号量里计数器的值是 -1，加 1 之后的值是 0，小于等于 0，按照信号量模型里对 up() 操作的描述，此时等待队列中的 T2 将会被唤醒。于是 T2 在 T1 执行完临界区代码之后才获得了进入临界区执行的机会，从而保证了互斥性。\n实现一个限流器1234567891011121314151617181920212223242526272829303132class ObjPool&lt;T, R&gt; &#123;  final List&lt;T&gt; pool;  // 用信号量实现限流器  final Semaphore sem;  // 构造函数  ObjPool(int size, T t)&#123;    pool = new Vector&lt;T&gt;()&#123;&#125;;    for(int i=0; i&lt;size; i++)&#123;      pool.add(t);    &#125;    sem = new Semaphore(size);  &#125;  // 利用对象池的对象，调用 func  R exec(Function&lt;T,R&gt; func) &#123;    T t = null;    sem.acquire();    try &#123;      t = pool.remove(0);      return func.apply(t);    &#125; finally &#123;      pool.add(t);      sem.release();    &#125;  &#125;&#125;// 创建对象池ObjPool&lt;Long, String&gt; pool = new ObjPool&lt;Long, String&gt;(10, 2);// 通过对象池获取 t，之后执行  pool.exec(t -&gt; &#123;    System.out.println(t);    return t.toString();&#125;);\n用List保存了对象实例，用Semaphore实现了限流器。关键代码是ObjPool中的exec()方法，这个方法实现了限流的功能。在这个方法里面，首先调用 acquire() 方法，假设对象池的大小是 10，信号量的计数器初始化为 10，那么前 10 个线程调用 acquire() 方法，都能继续执行，相当于通过了信号灯，而其他线程则会阻塞在 acquire() 方法上。对于通过信号灯的线程，我们为每个线程分配了一个对象 t（这个分配工作是通过 pool.remove(0) 实现的），分配完之后会执行一个回调函数 func，而函数的参数正是前面分配的对象 t ；执行完回调函数之后，它们就会释放对象（这个释放工作是通过 pool.add(t) 实现的），同时调用 release() 方法来更新信号量的计数器。如果此时信号量里计数器的值小于等于 0，那么说明有线程在等待，此时会自动唤醒等待的线程。\nPS:和管程相比，信号量可以实现的独特功能就是同时允许多个线程进入临界区，但是信号量不能做的就是同时唤醒多个线程去争抢锁，只能唤醒一个阻塞中的线程，而且信号量模型是没有Condition的概念的，即阻塞线程被醒了直接就运行了而不会去检查此时临界条件是否已经不满足了，基于此考虑信号量模型才会设计出只能让一个线程被唤醒，否则就会出现因为缺少Condition检查而带来的线程安全问题。正因为缺失了Condition，所以用信号量来实现阻塞队列就很麻烦，因为要自己实现类似Condition的逻辑。\n","dateCreated":"2019-04-06T22:36:09+08:00","dateModified":"2019-04-06T22:56:45+08:00","datePublished":"2019-04-06T22:36:09+08:00","description":"","headline":"Java并发编程学习(十)之实现限流器","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://yoursite.com/2019/04/06/concurrent-programming-current-limiter/"},"publisher":{"@type":"Organization","name":"0ggmr0","sameAs":["https://github.com/0GGmr0"],"image":"head.jpg","logo":{"@type":"ImageObject","url":"head.jpg"}},"url":"http://yoursite.com/2019/04/06/concurrent-programming-current-limiter/","keywords":"并发"}</script>
+    <meta name="description" content="信号量模型模型图如下所示:  init():设置计数器的初始值 down():计数器的值-1，如果此时计数器的值小于0（没资源了），则当前线程被阻塞，否则继续进行 up():计数器的值+1，如果此时计数器的值小于或者等于0（大于0说明没有被阻塞的线程，因为资源够用），那么唤醒等待队列中的一个线程，并且将它从等待队列中移除。    这三个方法都是原子性的。下面代码为一个简单的信号量模型:123456">
+<meta name="keywords" content="并发">
 <meta property="og:type" content="blog">
-<meta property="og:title" content="0GGmr0&#39;s Blog">
-<meta property="og:url" content="http://yoursite.com/archives/2019/04/index.html">
+<meta property="og:title" content="Java并发编程学习(十)之实现限流器">
+<meta property="og:url" content="http://yoursite.com/2019/04/06/concurrent-programming-current-limiter/index.html">
 <meta property="og:site_name" content="0GGmr0&#39;s Blog">
-<meta property="og:description" content="得之坦然，失之淡然，争取必然，顺其自然">
+<meta property="og:description" content="信号量模型模型图如下所示:  init():设置计数器的初始值 down():计数器的值-1，如果此时计数器的值小于0（没资源了），则当前线程被阻塞，否则继续进行 up():计数器的值+1，如果此时计数器的值小于或者等于0（大于0说明没有被阻塞的线程，因为资源够用），那么唤醒等待队列中的一个线程，并且将它从等待队列中移除。    这三个方法都是原子性的。下面代码为一个简单的信号量模型:123456">
 <meta property="og:locale" content="zh-cn">
+<meta property="og:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-current-limiter1.png">
+<meta property="og:updated_time" content="2019-04-06T14:56:45.353Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="0GGmr0&#39;s Blog">
-<meta name="twitter:description" content="得之坦然，失之淡然，争取必然，顺其自然">
+<meta name="twitter:title" content="Java并发编程学习(十)之实现限流器">
+<meta name="twitter:description" content="信号量模型模型图如下所示:  init():设置计数器的初始值 down():计数器的值-1，如果此时计数器的值小于0（没资源了），则当前线程被阻塞，否则继续进行 up():计数器的值+1，如果此时计数器的值小于或者等于0（大于0说明没有被阻塞的线程，因为资源够用），那么唤醒等待队列中的一个线程，并且将它从等待队列中移除。    这三个方法都是原子性的。下面代码为一个简单的信号量模型:123456">
+<meta name="twitter:image" content="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-current-limiter1.png">
     
     
         
@@ -54,7 +58,7 @@
         
     
 
-<header id="header" data-behavior="2">
+<header id="header" data-behavior="5">
     <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
     <div class="header-title">
         <a class="header-title-link" href="/ ">0GGmr0&#39;s Blog</a>
@@ -77,7 +81,7 @@
         
     
 
-<nav id="sidebar" data-behavior="2">
+<nav id="sidebar" data-behavior="5">
     <div class="sidebar-container">
         
             <div class="sidebar-profile">
@@ -158,26 +162,22 @@
 </nav>
 
             
-            <div id="main" data-behavior="2"
+            <div id="main" data-behavior="5"
                  class="
                         hasCoverMetaIn
                         ">
                 
-    <section class="postShorten-group main-content-wrap">
+<article class="post">
     
     
-    <article class="postShorten postShorten--thumbnailimg-bottom">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/06/concurrent-programming-current-limiter/">
-                            Java并发编程学习(十)之实现限流器
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Java并发编程学习(十)之实现限流器
+        </h1>
+    
+    
+        <div class="post-meta">
     <time datetime="2019-04-06T22:36:09+08:00">
 	
 		    4月 06, 2019
@@ -192,10 +192,13 @@
     
 </div>
 
-            </div>
-            
-                <div class="postShorten-content">
-                    <h2 id="信号量模型"><a href="#信号量模型" class="headerlink" title="信号量模型"></a>信号量模型</h2><p>模型图如下所示:<br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-current-limiter1.png" alt="p1"></p>
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <h2 id="信号量模型"><a href="#信号量模型" class="headerlink" title="信号量模型"></a>信号量模型</h2><p>模型图如下所示:<br><img src="http://pp9dbwrqy.bkt.clouddn.com/concurrent-programming-current-limiter1.png" alt="p1"></p>
 <ul>
 <li><code>init()</code>:设置计数器的初始值</li>
 <li><code>down()</code>:计数器的值-1，如果此时计数器的值小于0（没资源了），则当前线程被阻塞，否则继续进行</li>
@@ -209,426 +212,77 @@
 <p>用<code>List</code>保存了对象实例，用<code>Semaphore</code>实现了限流器。关键代码是<code>ObjPool</code>中的<code>exec()</code>方法，这个方法实现了限流的功能。在这个方法里面，首先调用 <code>acquire()</code> 方法，假设对象池的大小是 10，信号量的计数器初始化为 10，那么前 10 个线程调用 <code>acquire()</code> 方法，都能继续执行，相当于通过了信号灯，而其他线程则会阻塞在 <code>acquire()</code> 方法上。对于通过信号灯的线程，我们为每个线程分配了一个对象 t（这个分配工作是通过 <code>pool.remove(0)</code> 实现的），分配完之后会执行一个回调函数 func，而函数的参数正是前面分配的对象 t ；执行完回调函数之后，它们就会释放对象（这个释放工作是通过 <code>pool.add(t)</code> 实现的），同时调用 <code>release()</code> 方法来更新信号量的计数器。如果此时信号量里计数器的值小于等于 0，那么说明有线程在等待，此时会自动唤醒等待的线程。</p>
 <p>PS:和管程相比，信号量可以实现的独特功能就是同时允许多个线程进入临界区，但是信号量不能做的就是同时唤醒多个线程去争抢锁，只能唤醒一个阻塞中的线程，而且信号量模型是没有Condition的概念的，即阻塞线程被醒了直接就运行了而不会去检查此时临界条件是否已经不满足了，基于此考虑信号量模型才会设计出只能让一个线程被唤醒，否则就会出现因为缺少Condition检查而带来的线程安全问题。正因为缺失了Condition，所以用信号量来实现阻塞队列就很麻烦，因为要自己实现类似Condition的逻辑。</p>
 
-                    
-                        
-
-                    
-                    
-                        <p>
-                            <a href="/2019/04/06/concurrent-programming-current-limiter/#post-footer" class="postShorten-excerpt_link link">
-                                评论和共享
-                            </a>
-                        </p>
-                    
-                </div>
             
+
         </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
         
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/06/concurrent-programming-thread-nums/">
-                            Java并发编程学习(九)线程数量和局部变量
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-06T20:58:10+08:00">
-	
-		    4月 06, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">标签</span><br>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/并发/">并发</a>
 
             </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/86666" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/06/concurrent-programming-thread-nums/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/06/concurrent-programming-life/">
-                            Java并发编程学习(八)之线程的生命周期
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-06T20:24:00+08:00">
-	
-		    4月 06, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/86366" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/06/concurrent-programming-life/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/06/concurrent-programming-tube-process/">
-                            Java并发编程学习(七)之管程
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-06T20:00:39+08:00">
-	
-		    4月 06, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/84017" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/06/concurrent-programming-tube-process/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/05/concurrent-programming-safe-activity-ability/">
-                            Java并发编程学习(六)之安全性、活跃性和性能问题
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-05T23:29:17+08:00">
-	
-		    4月 05, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p> 摘录自 <a href="https://time.geekbang.org/column/article/85702" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/05/concurrent-programming-safe-activity-ability/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/05/concurrent-programming-notice-wait/">
-                            Java并发编程学习(五)之用“等待-通知”机制优化循环等待
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-05T19:57:24+08:00">
-	
-		    4月 05, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/85241" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/05/concurrent-programming-notice-wait/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/05/concurrent-programming-deadlock/">
-                            Java并发编程学习(四)之死锁
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-05T14:25:33+08:00">
-	
-		    4月 05, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/85001" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/05/concurrent-programming-deadlock/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/05/concurrent-programming-mutually-exclusive/">
-                            Java并发编程学习(三)之互斥锁
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-05T12:03:47+08:00">
-	
-		    4月 05, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/84344" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/05/concurrent-programming-mutually-exclusive/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/04/concurrent-programming-solve-see-sort/">
-                            Java并发编程学习(二)之解决可见性和有序性
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-04T23:23:33+08:00">
-	
-		    4月 04, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/84017" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/04/concurrent-programming-solve-see-sort/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-right">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/04/04/concurrent-programming-bug-source/">
-                            Java并发编程学习(一)之并发BUG来源
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-04-04T20:59:14+08:00">
-	
-		    4月 04, 2019
-    	
-    </time>
-    
-        <span>发布在 </span>
-        
-    <a class="category-link" href="/categories/Java/">Java</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>摘录自 <a href="https://time.geekbang.org/column/article/84017" target="_blank" rel="noopener">极客时间</a><br>
-                    
-                        <a href="/2019/04/04/concurrent-programming-bug-source/" class="postShorten-excerpt_link link">
-                            阅读全文
-                        </a>
-                        
-                    
-                </p></div>
-            
-        </div>
-        
-    </article>
-    
-    <div class="pagination-bar">
-    <ul class="pagination">
         
         
-          <li class="pagination-next">
-            <a class="btn btn--default btn--small" href="/archives/2019/04/page/2/">
-              <span>下一页</span>
-              <i class="fa fa-angle-right text-base icon-ml"></i>
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-thread-nums/" data-tooltip="Java并发编程学习(九)线程数量和局部变量" aria-label="下一篇: Java并发编程学习(九)线程数量和局部变量">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
-          </li>
+        </li>
         
-        <li class="pagination-number">第 1 页 共 2 页</li>
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-current-limiter/&amp;title=Java并发编程学习(十)之实现限流器" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
     </ul>
 </div>
 
-</section>
+
+        
+        
+            
+        
+    </div>
+</article>
 
 
 
@@ -639,6 +293,77 @@
 </footer>
 
             </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">上一篇</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/06/concurrent-programming-thread-nums/" data-tooltip="Java并发编程学习(九)线程数量和局部变量" aria-label="下一篇: Java并发编程学习(九)线程数量和局部变量">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">下一篇</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-current-limiter/&amp;title=Java并发编程学习(十)之实现限流器" title="分享到 QQ">
+                    <i class="fab fa-qq" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="http://connect.qq.com/widget/shareqq/index.html?url=http://yoursite.com/2019/04/06/concurrent-programming-current-limiter/&amp;title=Java并发编程学习(十)之实现限流器">
+                        <i class="fab fa-qq" aria-hidden="true"></i><span>分享到 QQ</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
             
         </div>
         
@@ -685,6 +410,8 @@
         <!--SCRIPTS-->
 <script src="/assets/js/script-omrt6sh0skv3hg008jvdfajcsqqzyibzw4ehun1vxljlb2mfrl84jfkr42nm.min.js"></script>
 <!--SCRIPTS END-->
+
+    
 
 
 
